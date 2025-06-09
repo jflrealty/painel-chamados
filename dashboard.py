@@ -74,7 +74,7 @@ def bolinha(cor):
     return f"<span style='color:{cores[cor]}; font-size:24px;'>●</span>"
 
 total_chamados = len(df)
-em_atendimento = len(df[df["status"] == "em atendimento"])
+em_atendimento = len(df[df["status"].isin(["aberto", "em analise"])])
 encerrados = len(df[df["data_fechamento"].notna()])
 dentro_sla = len(df[df["sla_status"] == "dentro do prazo"])
 fora_sla = len(df[df["sla_status"] == "fora do prazo"])
