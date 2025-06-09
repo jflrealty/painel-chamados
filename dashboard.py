@@ -34,14 +34,15 @@ def carregar_dados():
     import os
 
     url = os.getenv("DATA_PUBLIC_URL")
-
     if not url:
         st.error("❌ Variável DATA_PUBLIC_URL não encontrada.")
         return pd.DataFrame()
 
     try:
-        engine = create_engine(url)  # não usar connect_args aqui
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+        engine = create_engine(url)
+        conn = engine.raw_connection()
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
+        conn.close()
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame()
