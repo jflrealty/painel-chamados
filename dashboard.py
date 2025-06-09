@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils.slack import get_nome_real
 from sqlalchemy import create_engine
+import os
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
 
@@ -31,18 +32,17 @@ st.markdown("---")
 # ====== LER DADOS ======
 @st.cache_data
 def carregar_dados():
-    import os
-
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
         st.error("❌ Variável DATA_PUBLIC_URL não encontrada.")
         return pd.DataFrame()
 
+    engine = create_engine(url, connect_args={"sslmode": "require"})
+
     try:
-        engine = create_engine(url)
-        conn = engine.raw_connection()
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
-        conn.close()
+        connection = engine.raw_connection()
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
+        connection.close()
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame()
@@ -59,38 +59,57 @@ def carregar_dados():
         ]
         df = df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
 
+        df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors='coerce')
+        df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors='coerce')
+
     return df
 
 df = carregar_dados()
 
-# ====== METRIC CARDS COM ÍCONES COLORIDOS ======
+# ====== APLICAR FILTROS ======
+if not df.empty:
+    st.sidebar.markdown("## 🎛️ Filtros")
 
-def bolinha(cor):
-    cores = {
-        "verde": "#28a745",
-        "vermelho": "#dc3545",
-        "cinza": "#6c757d"
-    }
-    return f"<span style='color:{cores[cor]}; font-size:24px;'>●</span>"
+    # Filtro por data
+    min_date = df["data_abertura"].min()
+    max_date = df["data_abertura"].max()
+    data_inicial, data_final = st.sidebar.date_input("📅 Intervalo de abertura:", [min_date, max_date])
 
-# Limpeza de dados para evitar erro com espaços/capitalização
-df["status"] = df["status"].astype(str).str.strip().str.lower()
-df["sla_status"] = df["sla_status"].astype(str).str.strip().str.lower()
+    if data_inicial and data_final:
+        df = df[df["data_abertura"].between(pd.to_datetime(data_inicial), pd.to_datetime(data_final))]
 
-# Contagens
-total_chamados = len(df)
-em_atendimento = len(df[df["status"].isin(["aberto", "em analise"])])
-encerrados = len(df[df["data_fechamento"].notna()])
-dentro_sla = len(df[df["sla_status"] == "dentro do prazo"])
-fora_sla = len(df[df["sla_status"] == "fora do prazo"])
+    # Filtro por responsável
+    responsaveis_unicos = sorted(df["responsavel_nome"].dropna().unique().tolist())
+    responsaveis = st.sidebar.multiselect("🧍 Responsável:", options=responsaveis_unicos)
 
-# Renderização
+    if responsaveis:
+        df = df[df["responsavel_nome"].isin(responsaveis)]
+
+# ====== METRIC CARDS ======
 col1, col2, col3, col4, col5 = st.columns(5)
 
-col1.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{total_chamados}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
-col2.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{em_atendimento}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-col3.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{encerrados}</h3><p>Encerrados</p></div>", unsafe_allow_html=True)
-col4.markdown(f"<div class='card'>{bolinha('verde')}<h3>{dentro_sla}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
-col5.markdown(f"<div class='card'>{bolinha('vermelho')}<h3>{fora_sla}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
-# ====== TABELA ======
+# Dash 1 - Total
+col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
+
+# Dash 2 - Em Atendimento (status aberto ou em análise)
+em_atendimento = df[df["status"].isin(["aberto", "em analise"])]
+col2.markdown(f"<div class='card'><h3>{len(em_atendimento)}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+
+# Dash 3 - Finalizados (data_fechamento preenchida)
+finalizados = df[df["data_fechamento"].notnull()]
+col3.markdown(f"<div class='card'><h3>{len(finalizados)}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+
+# Dash 4 - Dentro do SLA (exemplo: <= 2 dias úteis)
+sla_dias = 2
+df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
+dentro_sla = df[df["dias_para_fechamento"] <= sla_dias]
+col4.markdown(f"<div class='card'><h3>{len(dentro_sla)}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
+
+# Dash 5 - Fora do SLA
+fora_sla = df[df["dias_para_fechamento"] > sla_dias]
+col5.markdown(f"<div class='card'><h3>{len(fora_sla)}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ====== TABELA VISUAL ======
 st.dataframe(df, use_container_width=True)
