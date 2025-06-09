@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import io
 from utils.slack import get_nome_real
 from sqlalchemy import create_engine
 import os
@@ -61,6 +63,7 @@ def carregar_dados():
 
         df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors='coerce')
         df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors='coerce')
+        df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
     return df
 
@@ -87,29 +90,56 @@ if not df.empty:
 
 # ====== METRIC CARDS ======
 col1, col2, col3, col4, col5 = st.columns(5)
-
-# Dash 1 - Total
 col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
-
-# Dash 2 - Em Atendimento (status aberto ou em análise)
-em_atendimento = df[df["status"].isin(["aberto", "em analise"])]
-col2.markdown(f"<div class='card'><h3>{len(em_atendimento)}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-
-# Dash 3 - Finalizados (data_fechamento preenchida)
-finalizados = df[df["data_fechamento"].notnull()]
-col3.markdown(f"<div class='card'><h3>{len(finalizados)}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
-
-# Dash 4 - Dentro do SLA (exemplo: <= 2 dias úteis)
-sla_dias = 2
-df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
-dentro_sla = df[df["dias_para_fechamento"] <= sla_dias]
-col4.markdown(f"<div class='card'><h3>{len(dentro_sla)}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
-
-# Dash 5 - Fora do SLA
-fora_sla = df[df["dias_para_fechamento"] > sla_dias]
-col5.markdown(f"<div class='card'><h3>{len(fora_sla)}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='card'><h3>{len(df[df.status.isin(['aberto', 'em analise'])])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='card'><h3>{len(df[df['data_fechamento'].notnull()])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+col4.markdown(f"<div class='card'><h3>{len(df[df['dias_para_fechamento'] <= 2])}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
+col5.markdown(f"<div class='card'><h3>{len(df[df['dias_para_fechamento'] > 2])}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ====== TABELA VISUAL ======
+# ====== 📊 GRÁFICOS ======
+st.subheader("📊 Distribuição de Chamados")
+
+# Gráfico de Tipo de Ticket
+if "tipo_ticket" in df.columns:
+    tipo_counts = df["tipo_ticket"].value_counts()
+    fig1, ax1 = plt.subplots()
+    tipo_counts.plot(kind="bar", color="#3E84F4", ax=ax1)
+    ax1.set_title("Chamados por Tipo de Ticket")
+    ax1.set_ylabel("Quantidade")
+    st.pyplot(fig1)
+
+# Gráfico Tempo Médio de Fechamento
+fechados = df[df["data_fechamento"].notnull()]
+tempo_medio = fechados["dias_para_fechamento"].mean()
+st.metric("📅 Tempo médio de fechamento", f"{tempo_medio:.1f} dias")
+
+# Histograma (opcional)
+fig2, ax2 = plt.subplots()
+fechados["dias_para_fechamento"].dropna().hist(bins=10, color="#34A853", ax=ax2)
+ax2.set_title("Distribuição dos Dias para Fechamento")
+ax2.set_xlabel("Dias")
+ax2.set_ylabel("Chamados")
+st.pyplot(fig2)
+
+# ====== 📤 EXPORTAÇÃO ======
+st.subheader("📤 Exportar dados filtrados")
+
+col_exp1, col_exp2, col_exp3 = st.columns(3)
+
+# CSV
+csv = df.to_csv(index=False).encode("utf-8")
+col_exp1.download_button("⬇️ Exportar CSV", csv, "chamados.csv", "text/csv")
+
+# Excel
+excel_buffer = io.BytesIO()
+df.to_excel(excel_buffer, index=False, engine='xlsxwriter')
+col_exp2.download_button("📊 Exportar Excel", excel_buffer.getvalue(), "chamados.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# PDF (deixo para próxima etapa se quiser com logo, tabelado etc.)
+
+st.markdown("---")
+
+# ====== TABELA ======
 st.dataframe(df, use_container_width=True)
