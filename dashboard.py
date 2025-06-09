@@ -34,7 +34,7 @@ def carregar_dados():
     import os
     engine = create_engine(os.getenv("DATA_PUBLIC_URL"))
     with engine.connect() as connection:
-    df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
 
     # Traduzir IDs para nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
