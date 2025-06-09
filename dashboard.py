@@ -1,29 +1,62 @@
 import streamlit as st
-from db.comercial import get_chamados_comercial
+import pandas as pd
 from utils.slack import get_nome_real
 
-st.set_page_config(page_title="Painel de Chamados", layout="wide")
+st.set_page_config(page_title="Painel JFL", layout="wide")
 
-st.title("📊 Painel de Administração dos Bots")
+# ====== HEADER ======
+st.markdown(
+    """
+    <style>
+        .main { background-color: #F5F5F5; }
+        .title { font-size: 32px; font-weight: bold; color: #003366; }
+        .sub { font-size: 16px; color: #666666; }
+        .card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-bot = st.radio("Selecione o Bot", ["Comercial", "Financeiro"])
+st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>Monitoramento em tempo real • Base financeira</div>", unsafe_allow_html=True)
+st.markdown("---")
 
-if bot == "Comercial":
-    df = get_chamados_comercial()
+# ====== LER DADOS ======
+@st.cache_data
+def carregar_dados():
+    from sqlalchemy import create_engine
+    import os
+    engine = create_engine(os.getenv("DATA_PUBLIC_URL"))
+    df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
 
-    for col in ["responsavel", "solicitante", "ultimo_editor", "capturado_por"]:
-        if col in df.columns:
-            df[col] = df[col].apply(get_nome_real)
+    # Traduzir IDs para nomes reais
+    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
+    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
+    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
 
+    # Ocultar colunas indesejadas
     colunas_ocultas = [
-        "responsavel_id",
-        "thread_ts",
-        "historico_reaberturas",
-        "ultimo_editor",
-        "canal_id"
+        "responsavel", "solicitante", "capturado_por",
+        "responsavel_id", "thread_ts", "historico_reaberturas",
+        "ultimo_editor", "canal_id"
     ]
-    df = df.drop(columns=[col for col in colunas_ocultas if col in df.columns])
+    return df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
 
-    st.dataframe(df)
-else:
-    st.info("📌 Conexão com Financeiro ainda não implementada.")
+df = carregar_dados()
+
+# ====== METRIC CARDS ======
+col1, col2, col3 = st.columns(3)
+col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='card'><h3>{len(df[df.status == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='card'><h3>{len(df[df.status == 'finalizado'])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ====== TABELA (apenas visual por enquanto) ======
+st.dataframe(df, use_container_width=True)
