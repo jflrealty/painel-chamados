@@ -7,10 +7,16 @@ _cache_usuarios = {}
 def get_nome_real(user_id):
     if not user_id or not isinstance(user_id, str):
         return "–"
-    if not user_id.startswith("U"):  # evita IDs de subgrupos desativados como S08STJCNMHR
+
+    if user_id == "S08STJCNMHR":
+        return "Reservas"
+
+    if not user_id.startswith("U"):
         return "–"
+
     if user_id in _cache_usuarios:
         return _cache_usuarios[user_id]
+
     try:
         user = client.users_info(user=user_id)
         nome = user["user"]["real_name"]
