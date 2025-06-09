@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from utils.slack import get_nome_real
-from sqlalchemy import create_engine
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
 
@@ -31,6 +30,7 @@ st.markdown("---")
 # ====== LER DADOS ======
 @st.cache_data
 def carregar_dados():
+    from sqlalchemy import create_engine
     import os
 
     url = os.getenv("DATA_PUBLIC_URL")
@@ -38,11 +38,11 @@ def carregar_dados():
         st.error("❌ Variável DATA_PUBLIC_URL não encontrada.")
         return pd.DataFrame()
 
+    engine = create_engine(url, connect_args={"sslmode": "require"})
+
     try:
-        engine = create_engine(url)
-        conn = engine.raw_connection()
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
-        conn.close()
+        with engine.raw_connection() as conn:
+            df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame()
@@ -63,18 +63,28 @@ def carregar_dados():
 
 df = carregar_dados()
 
+# ====== FILTROS ======
+st.sidebar.header("🔎 Filtros")
+data_inicio = st.sidebar.date_input("Data inicial", value=pd.to_datetime("2024-01-01"))
+data_fim = st.sidebar.date_input("Data final", value=pd.to_datetime("today"))
+responsaveis = st.sidebar.multiselect("Responsável", options=sorted(df["responsavel_nome"].dropna().unique().tolist()))
+status_opcoes = st.sidebar.multiselect("Status", options=sorted(df["status"].dropna().unique().tolist()))
+
+# Aplicar filtros
+if not df.empty:
+    df = df[df["data_abertura"].between(pd.to_datetime(data_inicio), pd.to_datetime(data_fim))]
+    if responsaveis:
+        df = df[df["responsavel_nome"].isin(responsaveis)]
+    if status_opcoes:
+        df = df[df["status"].isin(status_opcoes)]
+
 # ====== METRIC CARDS ======
 col1, col2, col3 = st.columns(3)
 col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
-
-if not df.empty:
-    col2.markdown(f"<div class='card'><h3>{len(df[df.status == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h3>{len(df[df.status == 'finalizado'])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
-else:
-    col2.markdown(f"<div class='card'><h3>0</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h3>0</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='card'><h3>{len(df[df['status'] == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='card'><h3>{len(df[df['data_fechamento'].notnull()])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ====== TABELA ======
+# ====== TABELA (visual) ======
 st.dataframe(df, use_container_width=True)
