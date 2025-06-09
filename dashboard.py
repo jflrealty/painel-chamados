@@ -73,12 +73,18 @@ def bolinha(cor):
     }
     return f"<span style='color:{cores[cor]}; font-size:24px;'>●</span>"
 
+# Limpeza de dados para evitar erro com espaços/capitalização
+df["status"] = df["status"].astype(str).str.strip().str.lower()
+df["sla_status"] = df["sla_status"].astype(str).str.strip().str.lower()
+
+# Contagens
 total_chamados = len(df)
 em_atendimento = len(df[df["status"].isin(["aberto", "em analise"])])
 encerrados = len(df[df["data_fechamento"].notna()])
 dentro_sla = len(df[df["sla_status"] == "dentro do prazo"])
 fora_sla = len(df[df["sla_status"] == "fora do prazo"])
 
+# Renderização
 col1, col2, col3, col4, col5 = st.columns(5)
 
 col1.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{total_chamados}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
