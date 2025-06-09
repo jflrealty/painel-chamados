@@ -38,8 +38,20 @@ def carregar_dados():
         connect_args={"sslmode": "require"}  # obrigatório no Railway
     )
 
-    with engine.connect() as connection:
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
+    df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)  # ✅ usa engine aqui
+
+    # Traduzir IDs para nomes reais
+    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
+    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
+    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
+
+    # Ocultar colunas indesejadas
+    colunas_ocultas = [
+        "responsavel", "solicitante", "capturado_por",
+        "responsavel_id", "thread_ts", "historico_reaberturas",
+        "ultimo_editor", "canal_id"
+    ]
+    return df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
 
     # Traduzir IDs para nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
