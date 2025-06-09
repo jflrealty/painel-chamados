@@ -24,7 +24,7 @@ st.markdown(
 )
 
 st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>Monitoramento em tempo real • Base financeira</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</div>", unsafe_allow_html=True))
 st.markdown("---")
 
 # ====== LER DADOS ======
