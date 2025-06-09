@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils.slack import get_nome_real
+from sqlalchemy import create_engine
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
 
@@ -30,17 +31,16 @@ st.markdown("---")
 # ====== LER DADOS ======
 @st.cache_data
 def carregar_dados():
-    from sqlalchemy import create_engine
     import os
 
     url = os.getenv("DATA_PUBLIC_URL")
+
     if not url:
         st.error("❌ Variável DATA_PUBLIC_URL não encontrada.")
         return pd.DataFrame()
 
-    engine = create_engine(url, connect_args={"sslmode": "require"})
-
     try:
+        engine = create_engine(url)  # não usar connect_args aqui
         df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
@@ -65,10 +65,15 @@ df = carregar_dados()
 # ====== METRIC CARDS ======
 col1, col2, col3 = st.columns(3)
 col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
-col2.markdown(f"<div class='card'><h3>{len(df[df.status == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-col3.markdown(f"<div class='card'><h3>{len(df[df.status == 'finalizado'])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+
+if not df.empty:
+    col2.markdown(f"<div class='card'><h3>{len(df[df.status == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='card'><h3>{len(df[df.status == 'finalizado'])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+else:
+    col2.markdown(f"<div class='card'><h3>0</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='card'><h3>0</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ====== TABELA (apenas visual por enquanto) ======
+# ====== TABELA ======
 st.dataframe(df, use_container_width=True)
