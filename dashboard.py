@@ -11,10 +11,18 @@ bot = st.radio("Selecione o Bot", ["Comercial", "Financeiro"])
 if bot == "Comercial":
     df = get_chamados_comercial()
 
-    # Traduz colunas específicas
     for col in ["responsavel", "solicitante", "ultimo_editor", "capturado_por"]:
         if col in df.columns:
             df[col] = df[col].apply(get_nome_real)
+
+    colunas_ocultas = [
+        "responsavel_id",
+        "thread_ts",
+        "historico_reaberturas",
+        "ultimo_editor",
+        "canal_id"
+    ]
+    df = df.drop(columns=[col for col in colunas_ocultas if col in df.columns])
 
     st.dataframe(df)
 else:
