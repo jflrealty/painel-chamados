@@ -33,25 +33,37 @@ def carregar_dados():
     from sqlalchemy import create_engine
     import os
 
-    engine = create_engine(
-        os.getenv("DATA_PUBLIC_URL"),
-        connect_args={"sslmode": "require"}  # obrigatório no Railway
-    )
+    # Pega a string completa já formatada com driver psycopg2
+    url = os.getenv("DATA_PUBLIC_URL")
 
-    df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)  # ✅ usa engine aqui
+    if not url:
+        st.error("❌ Variável DATA_PUBLIC_URL não encontrada.")
+        return pd.DataFrame()
 
-    # Traduzir IDs para nomes reais
-    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
-    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
+    # Cria engine corretamente
+    engine = create_engine(url, connect_args={"sslmode": "require"})
 
-    # Ocultar colunas indesejadas
-    colunas_ocultas = [
-        "responsavel", "solicitante", "capturado_por",
-        "responsavel_id", "thread_ts", "historico_reaberturas",
-        "ultimo_editor", "canal_id"
-    ]
-    return df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
+    try:
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+    except Exception as e:
+        st.error(f"❌ Erro ao ler dados do banco: {e}")
+        return pd.DataFrame()
+
+    # Traduz nomes
+    if not df.empty:
+        df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
+        df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
+        df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
+
+        # Oculta colunas
+        colunas_ocultas = [
+            "responsavel", "solicitante", "capturado_por",
+            "responsavel_id", "thread_ts", "historico_reaberturas",
+            "ultimo_editor", "canal_id"
+        ]
+        df = df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
+
+    return df
 
     # Traduzir IDs para nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
