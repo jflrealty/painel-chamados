@@ -32,7 +32,7 @@ st.markdown("---")
 def carregar_dados():
     from sqlalchemy import create_engine
     import os
-    engine = create_engine(os.getenv("DATA_PUBLIC_URL"))
+    engine = create_engine(os.getenv("DATA_PUBLIC_URL"), connect_args={"sslmode": "require"})
     with engine.connect() as connection:
         df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
 
