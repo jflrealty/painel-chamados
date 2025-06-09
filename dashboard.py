@@ -63,18 +63,28 @@ def carregar_dados():
 
 df = carregar_dados()
 
-# ====== METRIC CARDS ======
-col1, col2, col3 = st.columns(3)
-col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
+# ====== METRIC CARDS COM ÍCONES COLORIDOS ======
 
-if not df.empty:
-    col2.markdown(f"<div class='card'><h3>{len(df[df.status == 'em atendimento'])}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h3>{len(df[df.status == 'finalizado'])}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
-else:
-    col2.markdown(f"<div class='card'><h3>0</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='card'><h3>0</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
+def bolinha(cor):
+    cores = {
+        "verde": "#28a745",
+        "vermelho": "#dc3545",
+        "cinza": "#6c757d"
+    }
+    return f"<span style='color:{cores[cor]}; font-size:24px;'>●</span>"
 
-st.markdown("---")
+total_chamados = len(df)
+em_atendimento = len(df[df["status"] == "em atendimento"])
+encerrados = len(df[df["data_fechamento"].notna()])
+dentro_sla = len(df[df["sla_status"] == "dentro do prazo"])
+fora_sla = len(df[df["sla_status"] == "fora do prazo"])
 
+col1, col2, col3, col4, col5 = st.columns(5)
+
+col1.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{total_chamados}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
+col2.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{em_atendimento}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
+col3.markdown(f"<div class='card'>{bolinha('cinza')}<h3>{encerrados}</h3><p>Encerrados</p></div>", unsafe_allow_html=True)
+col4.markdown(f"<div class='card'>{bolinha('verde')}<h3>{dentro_sla}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
+col5.markdown(f"<div class='card'>{bolinha('vermelho')}<h3>{fora_sla}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
 # ====== TABELA ======
 st.dataframe(df, use_container_width=True)
