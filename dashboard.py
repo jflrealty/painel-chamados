@@ -41,8 +41,7 @@ def carregar_dados():
     engine = create_engine(url, connect_args={"sslmode": "require"})
 
     try:
-        with engine.connect() as connection:
-            df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame()
@@ -60,18 +59,6 @@ def carregar_dados():
         df = df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
 
     return df
-    # Traduzir IDs para nomes reais
-    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
-    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
-
-    # Ocultar colunas indesejadas
-    colunas_ocultas = [
-        "responsavel", "solicitante", "capturado_por",
-        "responsavel_id", "thread_ts", "historico_reaberturas",
-        "ultimo_editor", "canal_id"
-    ]
-    return df.drop(columns=[c for c in colunas_ocultas if c in df.columns])
 
 df = carregar_dados()
 
