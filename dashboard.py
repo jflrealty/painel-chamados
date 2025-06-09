@@ -33,7 +33,8 @@ def carregar_dados():
     from sqlalchemy import create_engine
     import os
     engine = create_engine(os.getenv("DATA_PUBLIC_URL"))
-    df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+    with engine.connect() as connection:
+    df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
 
     # Traduzir IDs para nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
