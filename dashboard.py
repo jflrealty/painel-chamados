@@ -8,11 +8,14 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine, text          # 👈 text IMPORTANTE!
 from utils.slack import get_nome_real               # sua função já existente
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 # -------------------------------------------------------------
 # CONFIG STREAMLIT
 # -------------------------------------------------------------
 st.set_page_config(page_title="Painel JFL", layout="wide")
+slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
 
 st.markdown("""
 <style>
@@ -56,6 +59,18 @@ def parse_reaberturas(txt: str, os_id: int, resp_nome: str, data_abertura):
             })
     return regs
 
+def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
+    """Retorna todas as mensagens da thread (ordem cronológica)."""
+    try:
+        resp = slack_client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            limit=200
+        )
+        return resp["messages"][::-1]
+    except SlackApiError as e:
+        st.error(f"Erro Slack: {e.response['error']}")
+        return []
 # -------------------------------------------------------------
 # LOAD DATA
 # -------------------------------------------------------------
@@ -265,5 +280,41 @@ buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
 b4.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.markdown("---")
-st.dataframe(df, use_container_width=True)
+st.markdown("## 📄 Chamados")
+
+for _, row in df.iterrows():
+    with st.expander(f"OS {row.id} | {row.tipo_ticket} | {row.status}"):
+        colA, colB = st.columns([3, 1])
+
+        with colA:
+            st.write(f"""
+            **Solicitante**: {row.solicitante_nome}  
+            **Responsável**: {row.responsavel_nome}  
+            **Abertura**: {row.data_abertura:%d/%m/%Y %H:%M}
+            """)
+
+        with colB:
+            if st.button("💬 Ver thread Slack", key=f"thread_{row.id}"):
+                msgs = fetch_thread(row.canal_id, row.thread_ts)
+                if msgs:
+                    st.markdown("---")
+                    for m in msgs:
+                        t = pd.to_datetime(float(m["ts"]), unit="s")
+                        autor = get_nome_real(m.get("user", ""))
+                        texto = m.get("text", "")
+                        ts_msg = m.get("ts", "")
+                        ts_thread = row.thread_ts
+
+                        is_autor = ts_msg == ts_thread
+
+                        if is_autor:
+                            st.markdown(
+                                f"<div style='background:#E3F2FD;padding:8px;border-left:4px solid #2196F3;'>"
+                                f"<strong>📌 {autor}</strong> &nbsp;&nbsp; <span style='color:#555;'>_{t:%d/%m %H:%M}_</span><br>{texto}"
+                                f"</div>", unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(
+                                f"<p><strong>{autor}</strong> &nbsp;&nbsp; <span style='color:#555;'>_{t:%d/%m %H:%M}_</span><br>{texto}</p>",
+                                unsafe_allow_html=True
+                            )
