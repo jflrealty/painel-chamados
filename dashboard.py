@@ -67,7 +67,7 @@ def carregar_dados():
     # Processar log_edicoes
     registros = []
     for _, row in df.iterrows():
-        if pd.notna(row["log_edicoes"]):
+        if row.get("log_edicoes") not in [None, "", "null"]:
             try:
                 log = json.loads(row["log_edicoes"])
                 for campo, mudanca in log.items():
