@@ -45,12 +45,12 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
 def carregar_dados():
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
-        st.error("❌ DATA_PUBLIC_URL não definida.")
+        st.error("❌ Variável DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)  # ✅ sem cursor
     except Exception as e:
         st.error(f"❌ Erro ao ler banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -58,44 +58,58 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    # colunas garantidas
-    needed = ["responsavel","solicitante","capturado_por","status",
-              "data_ultima_edicao","ultimo_editor",
-              "data_abertura","data_fechamento",
-              "log_edicoes","historico_reaberturas"]
-    for c in needed:
-        df.setdefault(c, None)
+    # ---------- GARANTE COLUNAS ----------
+    obrigatorias = [
+        "responsavel", "solicitante", "capturado_por",
+        "data_abertura", "data_fechamento",
+        "log_edicoes", "historico_reaberturas", "status",
+        "data_ultima_edicao", "ultimo_editor"
+    ]
+    for col in obrigatorias:
+        if col not in df.columns:
+            df[col] = None
 
-    # nomes + datas
+    # ---------- NOMES REAIS ----------
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
-    df["data_abertura"]    = pd.to_datetime(df["data_abertura"],  errors="coerce")
-    df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
-    df["dias_para_fechamento"] = (df["data_fechamento"]-df["data_abertura"]).dt.days
+    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
+    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
 
-    # ----------- histórico de alterações -----------------
+    # ---------- DATAS & SLA ----------
+    df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
+    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
+    df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
+
+    # ---------- df_alt: ALTERAÇÕES & REABERTURAS ----------
     registros = []
     for _, r in df.iterrows():
-        # log_edicoes
+        # edições
         if r["log_edicoes"] not in [None, "", "null"]:
             try:
-                for campo, mud in json.loads(r["log_edicoes"]).items():
-                    registros.append(
-                        dict(id=r["id"],
-                             quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
-                             quem=r["ultimo_editor"] or "-",
-                             descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
-                             campo=campo, de=mud.get("de"), para=mud.get("para"),
-                             responsavel_nome=r["responsavel_nome"],
-                             data_abertura=r["data_abertura"]))
+                log = json.loads(r["log_edicoes"])
+                for campo, mud in log.items():
+                    registros.append({
+                        "id": r["id"],
+                        "quando": pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
+                        "quem": r["ultimo_editor"] or "-",
+                        "descricao": f"{campo}: {mud.get('de')} → {mud.get('para')}",
+                        "campo": campo,
+                        "de": mud.get("de"), "para": mud.get("para"),
+                        "responsavel_nome": r["responsavel_nome"],
+                        "data_abertura": r["data_abertura"]
+                    })
             except Exception as e:
-                print("⚠️ log_edicoes inválido:", e)
+                print("⚠️ log_edicoes mal-formado:", e)
 
         # reaberturas
-        registros += parse_reaberturas(r["historico_reaberturas"],
-                                       r["id"], r["responsavel_nome"],
-                                       r["data_abertura"])
+        registros += parse_reaberturas(
+            r.get("historico_reaberturas"), r["id"],
+            r["responsavel_nome"], r["data_abertura"]
+        )
 
-    df_alt = pd.DataFrame(registros).sort_values("quando", ascending=False)
+    df_alt = pd.DataFrame(registros)
+    if not df_alt.empty and "quando" in df_alt.columns:
+        df_alt = df_alt.sort_values("quando", ascending=False)
+
     return df, df_alt
 
 df, df_alt = carregar_dados()
