@@ -134,9 +134,15 @@ if df.empty:
     st.stop()
 
 # ---------- SIDEBAR -----------
+# ---------- SIDEBAR -----------
 st.sidebar.markdown("## 🎛️ Filtros")
 min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
 d_ini, d_fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
+
+# ✅ Força conversão para tipo compatível com datetime64[ns]
+d_ini = pd.to_datetime(d_ini)
+d_fim = pd.to_datetime(d_fim)
+
 if d_ini and d_fim:
     mask = df["data_abertura"].between(d_ini, d_fim)
     df = df[mask]
