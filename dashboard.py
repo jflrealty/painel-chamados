@@ -116,11 +116,13 @@ st.markdown("---")
 
 # ---------- CHARTS ----------
 st.subheader("📊 Distribuição de Chamados")
+
 if "tipo_ticket" in df.columns and not df.empty:
-    fig1, ax1 = plt.subplots()
+    fig1, ax1 = plt.subplots(figsize=(6, 3))  # ⬅️ largura 6, altura 3
     df["tipo_ticket"].value_counts().plot.bar(color="#3E84F4", ax=ax1)
     ax1.set_title("Chamados por Tipo de Ticket")
     ax1.set_ylabel("Quantidade")
+    plt.tight_layout()
     st.pyplot(fig1)
 
 fechados = df[df["data_fechamento"].notna()]
@@ -129,12 +131,29 @@ st.metric("📅 Tempo médio de fechamento",
           f"{tempo_medio:.1f} dias" if pd.notna(tempo_medio) else "-")
 
 if not fechados.empty:
-    fig2, ax2 = plt.subplots()
+    fig2, ax2 = plt.subplots(figsize=(6, 3))  # ⬅️ idem aqui
     fechados["dias_para_fechamento"].hist(bins=10, color="#34A853", ax=ax2)
     ax2.set_title("Distribuição dos Dias para Fechamento")
     ax2.set_xlabel("Dias")
     ax2.set_ylabel("Chamados")
+    plt.tight_layout()
     st.pyplot(fig2)
+
+# Gráfico de Top alterações (opcional, se estiver usando também)
+top_alt = (df_alt.groupby(["campo", "de", "para"])
+                  .size()
+                  .reset_index(name="qtd")
+                  .sort_values("qtd", ascending=False))
+
+if not top_alt.empty:
+    st.markdown("### 📊 Top 10 alterações")
+    fig3, ax3 = plt.subplots(figsize=(6, 3))  # também reduzido
+    top_alt.head(10).plot(kind="bar", x="para", y="qtd", color="#FF7043", ax=ax3)
+    ax3.set_xlabel("Para")
+    ax3.set_ylabel("Quantidade")
+    ax3.set_title("Top 10 alterações (campo/de → para)")
+    plt.tight_layout()
+    st.pyplot(fig3)
 
 # ---------- ALTERAÇÕES ----------
 st.markdown("## 🔄 Alterações nos Chamados")
