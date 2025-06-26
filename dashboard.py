@@ -96,19 +96,22 @@ if not df.empty:
     d_ini, d_fim = st.sidebar.date_input("📅 Intervalo de abertura:", [min_d, max_d])
     if d_ini and d_fim:
         df = df[df["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
-        df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+
+        if not df_alt.empty and "data_abertura" in df_alt.columns:
+            df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
 
     # Responsável
     resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-    resp_sel  = st.sidebar.multiselect("🧍 Responsável:", resp_opts)
+    resp_sel = st.sidebar.multiselect("🧍 Responsável:", resp_opts)
     if resp_sel:
-        df      = df[df["responsavel_nome"].isin(resp_sel)]
-        df_alt  = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
+        df = df[df["responsavel_nome"].isin(resp_sel)]
+        if not df_alt.empty and "responsavel_nome" in df_alt.columns:
+            df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
 
     # Campo alterado
-    if not df_alt.empty:
+    if not df_alt.empty and "campo" in df_alt.columns:
         campo_opts = sorted(df_alt["campo"].unique())
-        campo_sel  = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
+        campo_sel = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
         if campo_sel:
             df_alt = df_alt[df_alt["campo"].isin(campo_sel)]
 
