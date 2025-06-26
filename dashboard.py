@@ -85,6 +85,8 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
 # LOAD DATA (com cache)
 # -------------------------------------------------------------
 
+from sqlalchemy import text
+
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL")
@@ -94,14 +96,15 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        with engine.connect() as conn:  # ← aqui é a correção
-            df = pd.read_sql("SELECT * FROM ordens_servico", conn)
+        with engine.connect().execution_options(stream_results=True) as conn:
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)  # ← agora vai!
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
+
 
     obrigatorias = [
         "responsavel", "solicitante", "capturado_por",
