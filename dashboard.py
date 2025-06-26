@@ -39,6 +39,7 @@ def carregar_dados():
         return pd.DataFrame(), pd.DataFrame()
 
     engine = create_engine(url, connect_args={"sslmode": "require"})
+
     try:
         with engine.connect() as con:
             df = pd.read_sql("SELECT * FROM ordens_servico", con=con)
