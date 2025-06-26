@@ -49,8 +49,8 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
     return out
 
 # ---------- LOAD DATA ----------
-@st.cache_data
-def carregar_dados():
+@st.cache_data(show_spinner="🔄 Carregando dados…")
+def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
         st.error("❌ Variável DATA_PUBLIC_URL não definida.")
@@ -58,8 +58,13 @@ def carregar_dados():
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
 
+        # ▸ raw_connection devolve exatamente o objeto que o pandas espera
+        conn = engine.raw_connection()
+        try:
+            df = pd.read_sql("SELECT * FROM ordens_servico", conn)
+        finally:
+            conn.close()                     # sempre fechar!
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -67,53 +72,56 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    # garantir colunas sempre presentes
-    NEED = ["responsavel","solicitante","capturado_por",
-            "data_abertura","data_fechamento",
-            "log_edicoes","historico_reaberturas","status"]
+    # -----------------------------------------------------------------
+    #  resto da função (garantir colunas, nomes reais, datas, logs ...)
+    # -----------------------------------------------------------------
+    NEED = ["responsavel", "solicitante", "capturado_por",
+            "data_abertura", "data_fechamento",
+            "log_edicoes", "historico_reaberturas", "status"]
     for c in NEED:
         if c not in df.columns:
             df[c] = None
 
-    # nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
 
-    # datas & SLA
     df["data_abertura"]    = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
-    df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
+    df["dias_para_fechamento"] = (
+        df["data_fechamento"] - df["data_abertura"]
+    ).dt.days
 
-    # ---------- CONSTRUIR df_alt ----------
-    reg = []
+    # -------- construir df_alt (edições + reaberturas) ---------------
+    registros = []
     for _, r in df.iterrows():
-        # JSON log_edicoes
+        # log_edicoes (JSON)
         if r["log_edicoes"] not in [None, "", "null"]:
             try:
                 log = json.loads(r["log_edicoes"])
                 for campo, mud in log.items():
-                    reg.append({
+                    registros.append({
                         "id": r["id"],
                         "quando": r.get("data_ultima_edicao"),
                         "quem": r.get("ultimo_editor"),
                         "descricao": f"{campo}: {mud.get('de')} → {mud.get('para')}",
                         "campo": campo,
-                        "de": mud.get("de"),
-                        "para": mud.get("para"),
+                        "de": mud.get("de"), "para": mud.get("para"),
                         "responsavel_nome": r["responsavel_nome"],
-                        "data_abertura": r["data_abertura"]
+                        "data_abertura": r["data_abertura"],
                     })
-            except Exception as e:
-                print("⚠️ log_edicoes mal-formado:", e)
+            except Exception as exc:
+                print("⚠️ log_edicoes mal-formatado:", exc)
 
-        # Texto historico_reaberturas
-        reg += parse_reaberturas(
-            r.get("historico_reaberturas"), r["id"],
-            r["responsavel_nome"], r["data_abertura"]
+        # historico_reaberturas (texto livre)
+        registros += parse_reaberturas(
+            r.get("historico_reaberturas"),
+            r["id"],
+            r["responsavel_nome"],
+            r["data_abertura"],
         )
 
-    df_alt = pd.DataFrame(reg)
+    df_alt = pd.DataFrame(registros)
     if "quando" in df_alt.columns:
         df_alt = df_alt.sort_values("quando", ascending=False)
 
