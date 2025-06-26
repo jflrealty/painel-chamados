@@ -1,19 +1,19 @@
-
-# dashboard.py  •  Painel JFL Comercial
-# -------------------------------------------------------------
-# Executar local:  streamlit run dashboard.py
-# -------------------------------------------------------------
+# dashboard.py
 import os, io, re, json
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine, text          # 👈 text IMPORTANTE!
-from utils.slack import get_nome_real               # sua função já existente
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from utils.slack import get_nome_real  # sua função já existente
 
-# -------------------------------------------------------------
-# CONFIG STREAMLIT
-# -------------------------------------------------------------
+# Configs
+load_dotenv()
 st.set_page_config(page_title="Painel JFL", layout="wide")
+slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
 
 st.markdown("""
 <style>
@@ -28,52 +28,45 @@ st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", 
 st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</div>", True)
 st.markdown("---")
 
-# -------------------------------------------------------------
-# HELPERS
-# -------------------------------------------------------------
-def parse_reaberturas(txt: str, os_id: int, resp_nome: str, data_abertura):
-    """
-    Converte linhas “[YYYY-MM-DD] Fulano reabriu …” → dicts para df_alt.
-    """
-    if not txt:
+# Helpers
+def parse_reaberturas(txt, os_id, resp_nome, data_abertura):
+    if not txt: return []
+    pat = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
+    return [
+        {
+            "id": os_id,
+            "quando": pd.to_datetime(m[0], errors="coerce"),
+            "quem": m[1],
+            "descricao": m[2],
+            "campo": "reabertura",
+            "de": "-",
+            "para": "-",
+            "responsavel_nome": resp_nome,
+            "data_abertura": data_abertura,
+        }
+        for linha in txt.splitlines() if (m := pat.match(linha.strip()))
+    ]
+
+def fetch_thread(channel_id, thread_ts):
+    try:
+        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
+        return resp["messages"][::-1]
+    except SlackApiError as e:
+        st.error(f"Erro Slack: {e.response['error']}")
         return []
 
-    pat = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
-    regs = []
-    for linha in filter(None, (l.strip() for l in txt.splitlines())):
-        m = pat.match(linha)
-        if m:
-            data, quem, desc = m.groups()
-            regs.append({
-                "id": os_id,
-                "quando": pd.to_datetime(data, errors="coerce"),
-                "quem": quem,
-                "descricao": desc,
-                "campo": "reabertura",
-                "de": "-",
-                "para": "-",
-                "responsavel_nome": resp_nome,
-                "data_abertura": data_abertura
-            })
-    return regs
-
-# -------------------------------------------------------------
-# LOAD DATA
-# -------------------------------------------------------------
+# Cache data
 @st.cache_data(show_spinner=False)
-def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    url = os.getenv("DATA_PUBLIC_URL")          # ex.: postgres://user:pass@host/db
+def carregar_dados():
+    url = os.getenv("DATA_PUBLIC_URL")
     if not url:
-        st.error("❌ Variável DATA_PUBLIC_URL não definida.")
+        st.error("❌ DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-
-        # 👉 Connection SUITE (sem raw_connection, sem _ConnectionFairy)
         with engine.connect() as conn:
             df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
-
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -81,32 +74,25 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    # --- garante colunas obrigatórias ---
     obrigatorias = [
         "responsavel", "solicitante", "capturado_por",
         "data_abertura", "data_fechamento",
         "log_edicoes", "historico_reaberturas", "status",
-        "data_ultima_edicao", "ultimo_editor"
+        "data_ultima_edicao", "ultimo_editor",
     ]
     for col in obrigatorias:
         if col not in df.columns:
             df[col] = None
 
-    # --- nomes legíveis ---
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
-
-    # --- datas & SLA ---
-    df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
+    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
+    df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # --- df_alt: edições + reaberturas ---
     registros = []
     for _, r in df.iterrows():
-
-        # LOG_EDICOES (JSON)
         if r["log_edicoes"] not in (None, "", "null"):
             try:
                 log = json.loads(r["log_edicoes"])
@@ -122,16 +108,8 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
                         "responsavel_nome": r["responsavel_nome"],
                         "data_abertura": r["data_abertura"]
                     })
-            except Exception as e:
-                print("⚠️ log_edicoes mal-formado:", e)
-
-        # HISTÓRICO REABERTURAS (texto)
-        registros += parse_reaberturas(
-            r.get("historico_reaberturas"),
-            r["id"],
-            r["responsavel_nome"],
-            r["data_abertura"]
-        )
+            except: pass
+        registros += parse_reaberturas(r.get("historico_reaberturas"), r["id"], r["responsavel_nome"], r["data_abertura"])
 
     df_alt = pd.DataFrame(registros)
     if not df_alt.empty and "quando" in df_alt.columns:
@@ -139,41 +117,29 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return df, df_alt
 
-
-# ------------------------------------------------------------------------
-# CARREGA
-# ------------------------------------------------------------------------
+# Carrega dados
 df, df_alt = carregar_dados()
 if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
-# ------------------------------------------------------------------------
-# SIDEBAR  •  FILTROS
-# ------------------------------------------------------------------------
+# Filtros
 st.sidebar.markdown("## 🎛️ Filtros")
-
-# Período
-valid_dates = df["data_abertura"].dropna()
-min_d, max_d = valid_dates.min().date(), valid_dates.max().date()
+min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
 
-mask_main = df["data_abertura"].dt.date.between(ini, fim)
-df = df[mask_main]
-mask_alt  = df_alt["data_abertura"].dt.date.between(ini, fim) if not df_alt.empty else []
-df_alt = df_alt[mask_alt] if not df_alt.empty else df_alt
+df = df[df["data_abertura"].dt.date.between(ini, fim)]
+if not df_alt.empty:
+    df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)]
 
-# Responsável
-responsaveis = sorted(df["responsavel_nome"].dropna().unique())
-sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", responsaveis)
+resp_opcoes = sorted(df["responsavel_nome"].dropna().unique())
+sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", resp_opcoes)
 if sel_resp:
     df = df[df["responsavel_nome"].isin(sel_resp)]
     if not df_alt.empty:
         df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
 
-# ------------------------------------------------------------------------
-# MÉTRICAS (cards)
-# ------------------------------------------------------------------------
+# Métricas
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
 c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
@@ -182,89 +148,119 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 
 st.markdown("---")
+st.subheader("📄 Chamados (clique em uma linha)")
 
-# -------------------------- GRÁFICOS ------------------------------------
+# Grade
+gb = GridOptionsBuilder.from_dataframe(df)
+gb.configure_pagination()
+gb.configure_default_column(resizable=True, filter=True, sortable=True)
+gb.configure_column("canal_id", hide=True)
+gb.configure_column("thread_ts", hide=True)
+gb.configure_selection("single")
+
+grid_resp = AgGrid(
+    df,
+    gridOptions=gb.build(),
+    update_mode=GridUpdateMode.SELECTION_CHANGED,
+    height=300,
+    theme="streamlit",
+    fit_columns_on_grid_load=True
+)
+
+sel = grid_resp["selected_rows"]
+if sel:
+    r = sel[0]
+    canal_id = r.get("canal_id")
+    thread_ts = r.get("thread_ts")
+
+    st.markdown(f"### 📝 Detalhes OS {r['id']}")
+    st.write(f"""
+**Tipo:** {r.get('tipo_ticket','')}  •  **Status:** {r.get('status','')}
+**Solicitante:** {r.get('solicitante_nome','')}  
+**Responsável:** {r.get('responsavel_nome','')}  
+**Abertura:** {pd.to_datetime(r['data_abertura']).strftime('%d/%m/%Y %H:%M')}
+""")
+
+    if st.button("💬 Ver thread Slack", key=f"btn_thread_{r['id']}"):
+        if canal_id and thread_ts:
+            msgs = fetch_thread(canal_id, thread_ts)
+            if msgs:
+                st.success(f"{len(msgs)} mensagens")
+                for m in msgs:
+                    ts = pd.to_datetime(float(m["ts"]), unit="s")
+                    user = get_nome_real(m.get("user", ""))
+                    txt = m.get("text", "")
+                    pin = "📌 " if m["ts"] == thread_ts else ""
+                    bg = "#E3F2FD" if pin else "#fff"
+                    st.markdown(
+                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
+                        f"<strong>{pin}{user}</strong> <span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.info("Nenhuma mensagem encontrada.")
+        else:
+            st.warning("Sem canal/thread cadastrados.")
+
+# Gráficos
 st.subheader("📊 Distribuição e Fechamento")
-
 g1, g2 = st.columns(2)
 
 with g1:
-    if "tipo_ticket" in df.columns and not df.empty:
-        fig, ax = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
-        df["tipo_ticket"].value_counts().plot.bar(
-            ax=ax, color="#3E84F4", width=0.5)
-        ax.set_ylabel("Qtd", fontsize=8)
-        ax.set_xlabel("")
-        ax.set_title("Por Tipo de Ticket", fontsize=9)
-        ax.tick_params(axis='x', labelrotation=25, labelsize=7)
-        ax.tick_params(axis='y', labelsize=7)
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-        st.pyplot(fig)
+    fig, ax = plt.subplots(figsize=(4, 2))
+    df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4", width=0.5)
+    ax.set_ylabel("Qtd", fontsize=8)
+    ax.set_title("Por Tipo de Ticket", fontsize=9)
+    ax.tick_params(axis="x", labelrotation=25, labelsize=7)
+    ax.tick_params(axis="y", labelsize=7)
+    for s in ax.spines.values(): s.set_visible(False)
+    st.pyplot(fig)
 
 with g2:
     fech = df[df["data_fechamento"].notna()]
-    st.metric("🗓️ Tempo médio de fechamento",
-              f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
-
+    st.metric("🗓️ Tempo médio de fechamento", f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
     if not fech.empty:
-        fig2, ax2 = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
+        fig2, ax2 = plt.subplots(figsize=(4, 2))
         fech["dias_para_fechamento"].hist(ax=ax2, bins=6, color="#34A853")
         ax2.set_xlabel("Dias", fontsize=8)
         ax2.set_ylabel("Chamados", fontsize=8)
         ax2.set_title("Dias até Fechamento", fontsize=9)
-        ax2.tick_params(axis='both', labelsize=7)
-        for spine in ax2.spines.values():
-            spine.set_visible(False)
+        ax2.tick_params(axis="both", labelsize=7)
+        for s in ax2.spines.values(): s.set_visible(False)
         st.pyplot(fig2)
 
-# ---------------------- ALTERAÇÕES --------------------------------------
+# Alterações
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
     st.info("Não há alterações para o filtro atual.")
 else:
-    vis = (df_alt[["id", "quando", "quem", "descricao"]]
-           .rename(columns={"id": "OS", "quando": "Data",
-                            "quem": "Usuário", "descricao": "Alteração"}))
-    
+    vis = df_alt[["id", "quando", "quem", "descricao"]].rename(columns={"id": "OS", "quando": "Data", "quem": "Usuário", "descricao": "Alteração"})
     a1, a2 = st.columns([2, 1])
 
     with a1:
         st.dataframe(vis, use_container_width=True)
 
     with a2:
-        top = (df_alt["quem"].value_counts().head(10)
-               .rename_axis("Usuário").reset_index(name="Qtd"))
-        fig3, ax3 = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
+        top = df_alt["quem"].value_counts().head(10).rename_axis("Usuário").reset_index(name="Qtd")
+        fig3, ax3 = plt.subplots(figsize=(4, 2))
         top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
         ax3.invert_yaxis()
         ax3.set_xlabel("Alterações", fontsize=8)
         ax3.set_title("Top Alteradores", fontsize=9)
-        ax3.tick_params(axis='both', labelsize=7)
-        for spine in ax3.spines.values():
-            spine.set_visible(False)
+        ax3.tick_params(axis="both", labelsize=7)
+        for s in ax3.spines.values(): s.set_visible(False)
         st.pyplot(fig3)
-# ------------------------------------------------------------------------
-# EXPORT
-# ------------------------------------------------------------------------
-st.subheader("📦 Exportar")
 
+# Exportações
+st.subheader("📦 Exportar")
 csv_main = df.to_csv(index=False).encode()
-csv_alt  = df_alt.to_csv(index=False).encode()
+csv_alt = df_alt.to_csv(index=False).encode()
 
 b1, b2, b3, b4 = st.columns(4)
 
 b1.download_button("⬇️ Chamados CSV", csv_main, "chamados.csv", "text/csv")
-
 buf = io.BytesIO(); df.to_excel(buf, index=False, engine="xlsxwriter")
-b2.download_button("📊 Chamados XLSX", buf.getvalue(), "chamados.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
+b2.download_button("📊 Chamados XLSX", buf.getvalue(), "chamados.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 b3.download_button("⬇️ Alterações CSV", csv_alt, "alteracoes.csv", "text/csv")
-
 buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
-b4.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-st.markdown("---")
-st.dataframe(df, use_container_width=True)
+b4.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
