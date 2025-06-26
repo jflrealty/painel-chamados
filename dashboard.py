@@ -129,20 +129,29 @@ if df.empty:
 # ---------- SIDEBAR -----------
 st.sidebar.markdown("## 🎛️ Filtros")
 
+# datas mín / máx já como Timestamp -> converta p/ .date() só para exibir
 min_d = df["data_abertura"].min().date()
 max_d = df["data_abertura"].max().date()
+
 date_range = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
 
-# date_input pode devolver lista ou tuple
+# → sempre volte a Timestamps **sem** timezone
 if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    d_ini, d_fim = [pd.to_datetime(d) for d in date_range]
-else:
-    d_ini = pd.to_datetime(date_range)
+    d_ini, d_fim = [pd.Timestamp(d).tz_localize(None) for d in date_range]
+else:  # quando o usuário escolhe só um dia
+    d_ini = pd.Timestamp(date_range).tz_localize(None)
     d_fim = d_ini
 
-mask = df["data_abertura"].between(d_ini, d_fim)
-df      = df[mask]
-df_alt  = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)] if not df_alt.empty else df_alt
+# normalize também a série — remove qualquer timezone acidental
+df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce").dt.tz_localize(None)
+if not df_alt.empty:
+    df_alt["data_abertura"] = pd.to_datetime(df_alt["data_abertura"], errors="coerce").dt.tz_localize(None)
+
+# agora a comparação não explode 🙂
+mask   = df["data_abertura"].between(d_ini, d_fim)
+df     = df[mask]
+df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)] if not df_alt.empty else df_alt
+
 
 resp_sel = st.sidebar.multiselect(
     "🧑‍💼 Responsável:",
