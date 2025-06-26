@@ -31,7 +31,7 @@ st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</di
 st.markdown("---")
 
 # ---------- LOAD DATA ----------
-@st.cache_data
+@st.cache_data(show_spinner="🔄 Carregando dados…")
 def carregar_dados():
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
@@ -40,8 +40,9 @@ def carregar_dados():
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        with engine.connect() as conn:
-            df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
+        conn = engine.raw_connection()
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
+        conn.close()
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -49,38 +50,36 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    # Proteção para colunas ausentes
     for col in ["responsavel", "solicitante", "capturado_por", "data_abertura", "data_fechamento", "log_edicoes"]:
         if col not in df.columns:
             df[col] = None
 
-    # Aplicar nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]  = df["capturado_por"].apply(get_nome_real)
 
-    # Datas e SLA
     df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # Processar log_edicoes
     registros = []
     for _, row in df.iterrows():
-        if row.get("log_edicoes") not in [None, "", "null"]:
+        raw_log = row.get("log_edicoes")
+        if raw_log and isinstance(raw_log, str):
             try:
-                log = json.loads(row["log_edicoes"])
-                for campo, mudanca in log.items():
-                    registros.append({
-                        "id": row.get("id"),
-                        "campo": campo,
-                        "de": str(mudanca.get("de")),
-                        "para": str(mudanca.get("para")),
-                        "responsavel_nome": row.get("responsavel_nome", ""),
-                        "data_abertura": row.get("data_abertura"),
-                    })
+                for campo, mud in json.loads(raw_log).items():
+                    registros.append(
+                        dict(
+                            id=row["id"],
+                            campo=campo,
+                            de=str(mud.get("de")),
+                            para=str(mud.get("para")),
+                            responsavel_nome=row["responsavel_nome"],
+                            data_abertura=row["data_abertura"],
+                        )
+                    )
             except Exception as e:
-                print("Erro ao processar log_edicoes:", e)
+                print("⚠️ log_edicoes inválido – ID", row["id"], ":", e)
 
     df_alt = pd.DataFrame(registros)
     return df, df_alt
@@ -91,30 +90,32 @@ df, df_alt = carregar_dados()
 if df.empty:
     st.warning("📭 Nenhum dado encontrado. Verifique a conexão ou os filtros aplicados.")
     st.stop()
-    
+
 # ---------- SIDEBAR FILTERS ----------
-if not df.empty:
-    st.sidebar.markdown("## 🎛️ Filtros")
+if pd.isna(df["data_abertura"].min()) or pd.isna(df["data_abertura"].max()):
+    st.warning("⚠️ Datas de abertura inválidas ou ausentes na base.")
+    st.stop()
 
-    min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
-    d_ini, d_fim = st.sidebar.date_input("🗓️ Intervalo de abertura:", [min_d, max_d])
-    if d_ini and d_fim:
-        df = df[df["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
-        if not df_alt.empty and "data_abertura" in df_alt.columns:
-            df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+st.sidebar.markdown("## 🎛️ Filtros")
+min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
+d_ini, d_fim = st.sidebar.date_input("🗓️ Intervalo de abertura:", [min_d, max_d])
+if d_ini and d_fim:
+    df = df[df["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+    if not df_alt.empty and "data_abertura" in df_alt.columns:
+        df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
 
-    resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-    resp_sel = st.sidebar.multiselect("🧝 Responsável:", resp_opts)
-    if resp_sel:
-        df = df[df["responsavel_nome"].isin(resp_sel)]
-        if not df_alt.empty and "responsavel_nome" in df_alt.columns:
-            df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
+resp_opts = sorted(df["responsavel_nome"].dropna().unique())
+resp_sel = st.sidebar.multiselect("🧝 Responsável:", resp_opts)
+if resp_sel:
+    df = df[df["responsavel_nome"].isin(resp_sel)]
+    if not df_alt.empty and "responsavel_nome" in df_alt.columns:
+        df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
 
-    if not df_alt.empty and "campo" in df_alt.columns:
-        campo_opts = sorted(df_alt["campo"].unique())
-        campo_sel = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
-        if campo_sel:
-            df_alt = df_alt[df_alt["campo"].isin(campo_sel)]
+if not df_alt.empty and "campo" in df_alt.columns:
+    campo_opts = sorted(df_alt["campo"].unique())
+    campo_sel = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
+    if campo_sel:
+        df_alt = df_alt[df_alt["campo"].isin(campo_sel)]
 
 # ---------- METRIC CARDS ----------
 col1, col2, col3, col4, col5 = st.columns(5)
