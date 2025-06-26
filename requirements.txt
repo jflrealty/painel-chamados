@@ -6,3 +6,4 @@ slack_sdk
 matplotlib
 xlsxwriter
 python-dotenv
+streamlit-aggrid
