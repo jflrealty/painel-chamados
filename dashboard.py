@@ -189,13 +189,14 @@ g1, g2 = st.columns(2)
 
 with g1:
     if "tipo_ticket" in df.columns and not df.empty:
-        fig, ax = plt.subplots(figsize=(5, 3))
-        df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4", width=0.6)
-        ax.set_ylabel("Qtd", fontsize=9)
+        fig, ax = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
+        df["tipo_ticket"].value_counts().plot.bar(
+            ax=ax, color="#3E84F4", width=0.5)
+        ax.set_ylabel("Qtd", fontsize=8)
         ax.set_xlabel("")
-        ax.set_title("Por Tipo de Ticket", fontsize=10)
-        ax.tick_params(axis='x', labelrotation=30, labelsize=8)
-        ax.tick_params(axis='y', labelsize=8)
+        ax.set_title("Por Tipo de Ticket", fontsize=9)
+        ax.tick_params(axis='x', labelrotation=25, labelsize=7)
+        ax.tick_params(axis='y', labelsize=7)
         for spine in ax.spines.values():
             spine.set_visible(False)
         st.pyplot(fig)
@@ -206,12 +207,12 @@ with g2:
               f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
 
     if not fech.empty:
-        fig2, ax2 = plt.subplots(figsize=(5, 3))
-        fech["dias_para_fechamento"].hist(ax=ax2, bins=8, color="#34A853")
-        ax2.set_xlabel("Dias", fontsize=9)
-        ax2.set_ylabel("Chamados", fontsize=9)
-        ax2.set_title("Dias até Fechamento", fontsize=10)
-        ax2.tick_params(axis='both', labelsize=8)
+        fig2, ax2 = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
+        fech["dias_para_fechamento"].hist(ax=ax2, bins=6, color="#34A853")
+        ax2.set_xlabel("Dias", fontsize=8)
+        ax2.set_ylabel("Chamados", fontsize=8)
+        ax2.set_title("Dias até Fechamento", fontsize=9)
+        ax2.tick_params(axis='both', labelsize=7)
         for spine in ax2.spines.values():
             spine.set_visible(False)
         st.pyplot(fig2)
@@ -233,12 +234,12 @@ else:
     with a2:
         top = (df_alt["quem"].value_counts().head(10)
                .rename_axis("Usuário").reset_index(name="Qtd"))
-        fig3, ax3 = plt.subplots(figsize=(4, 3))
+        fig3, ax3 = plt.subplots(figsize=(4, 2))  # ⬅️ gráfico menor ainda
         top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
         ax3.invert_yaxis()
-        ax3.set_xlabel("Alterações", fontsize=9)
-        ax3.set_title("Top Alteradores", fontsize=10)
-        ax3.tick_params(axis='both', labelsize=8)
+        ax3.set_xlabel("Alterações", fontsize=8)
+        ax3.set_title("Top Alteradores", fontsize=9)
+        ax3.tick_params(axis='both', labelsize=7)
         for spine in ax3.spines.values():
             spine.set_visible(False)
         st.pyplot(fig3)
