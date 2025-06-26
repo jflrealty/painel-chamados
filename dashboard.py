@@ -1,10 +1,10 @@
-# dashboard.py  – Painel JFL Comercial -------------------------------
+import json
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import re, json, io, os, datetime as dt
-from sqlalchemy import create_engine                       #  ▲ sem .text
-from utils.slack import get_nome_real                      #  ↳ já existe
+from sqlalchemy import create_engine                      
+from utils.slack import get_nome_real                     
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
 
