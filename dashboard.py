@@ -97,7 +97,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
         with engine.connect().execution_options(stream_results=True) as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)  # ← agora vai!
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
