@@ -9,8 +9,8 @@ import os, io, re, json
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine, text  # text é necessário para consultas seguras
-from utils.slack import get_nome_real      # função utilitária já existente no seu repo
+from sqlalchemy import create_engine               # para conexão segura
+from utils.slack import get_nome_real              # helper de nomes reais
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
@@ -50,7 +50,7 @@ def parse_reaberturas(txt: str, os_id: int, resp_nome: str, data_abertura):
     if not txt:
         return []
 
-    pat = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\\s+(.+?)\\s+(.*)")
+    pat = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
     regs = []
     for linha in filter(None, (l.strip() for l in txt.splitlines())):
         m = pat.match(linha)
@@ -76,8 +76,7 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
     """Baixa as mensagens de uma thread do Slack (ordem cronológica)."""
     try:
         resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
-        # Slack devolve da mais recente para a mais antiga → invertemos
-        return resp["messages"][::-1]
+        return resp["messages"][::-1]      # inverte → cronológica
     except SlackApiError as e:
         st.error(f"Erro Slack: {e.response['error']}")
         return []
@@ -95,8 +94,9 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
+        # ATT: pandas exige string quando passamos Connection
         with engine.connect() as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
+            df = pd.read_sql("SELECT * FROM ordens_servico", conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -105,16 +105,10 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         return df, pd.DataFrame()
 
     obrigatorias = [
-        "responsavel",
-        "solicitante",
-        "capturado_por",
-        "data_abertura",
-        "data_fechamento",
-        "log_edicoes",
-        "historico_reaberturas",
-        "status",
-        "data_ultima_edicao",
-        "ultimo_editor",
+        "responsavel", "solicitante", "capturado_por",
+        "data_abertura", "data_fechamento",
+        "log_edicoes", "historico_reaberturas", "status",
+        "data_ultima_edicao", "ultimo_editor",
     ]
     for col in obrigatorias:
         if col not in df.columns:
@@ -123,15 +117,16 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     # nomes + datas + SLA
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
+    df["capturado_nome"]  = df["capturado_por"].apply(get_nome_real)
 
-    df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
+    df["data_abertura"]   = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
     # ---- df_alt  (edições + reaberturas) ----
-    regs = []
+    regs: list[dict] = []
     for _, r in df.iterrows():
+        # edições
         if r["log_edicoes"] not in (None, "", "null"):
             try:
                 log = json.loads(r["log_edicoes"])
@@ -152,6 +147,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
             except Exception:
                 pass
 
+        # reaberturas
         regs += parse_reaberturas(
             r.get("historico_reaberturas"), r["id"], r["responsavel_nome"], r["data_abertura"]
         )
