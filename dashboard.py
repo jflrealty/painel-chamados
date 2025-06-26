@@ -49,26 +49,20 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
     return out
 
 # ---------- LOAD DATA ----------
-@st.cache_data(show_spinner=False, ttl=600)
+@st.cache_data
 def carregar_dados():
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
         st.error("❌ Variável DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # 1ª tentativa – conexão SQLAlchemy “bonita”
     try:
-        engine = create_engine(url, connect_args={"sslmode": "require"})
+        engine = create_engine(url, connect_args={"sslmode": "require"}, future=True)
         with engine.begin() as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
-    except Exception as e1:                        # fallback cru
-        try:
-            raw = engine.raw_connection()
-            df  = pd.read_sql("SELECT * FROM ordens_servico", con=raw)
-            raw.close()
-        except Exception as e2:
-            st.error(f"❌ Erro ao ler dados do banco:\n{e1 or e2}")
-            return pd.DataFrame(), pd.DataFrame()
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), con=conn)
+    except Exception as e:
+        st.error(f"❌ Erro ao ler dados do banco: {e}")
+        return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
