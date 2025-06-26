@@ -55,10 +55,10 @@ def carregar_dados():
 
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]  = df["capturado_por"].apply(get_nome_real)
+    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
 
-    df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
-    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
+    df["data_abertura"]    = pd.to_datetime(df["data_abertura"], errors="coerce")
+    df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
     registros = []
@@ -77,9 +77,16 @@ def carregar_dados():
                     })
             except Exception as e:
                 print("Erro no log_edicoes:", e)
-    df_alt = pd.DataFrame(registros)
 
+    df_alt = pd.DataFrame(registros)
     return df, df_alt
+
+# ===== CHAMAR E VERIFICAR DADOS =====
+df, df_alt = carregar_dados()
+
+if df is None or df.empty:
+    st.warning("📭 Nenhum dado encontrado. Verifique a conexão ou os filtros aplicados.")
+    st.stop()
 
 # ---------- SIDEBAR FILTERS ----------
 if not df.empty:
