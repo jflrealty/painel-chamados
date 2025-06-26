@@ -1,7 +1,11 @@
 import os
 from slack_sdk import WebClient
+import streamlit as st      # ← adicione
 
-client = WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+# tenta st.secrets primeiro; se não existir usa env var
+token = st.secrets.get("SLACK_BOT_TOKEN", os.getenv("SLACK_BOT_TOKEN", ""))
+
+client = WebClient(token=token)
 _cache_usuarios = {}
 
 def get_nome_real(user_id):
