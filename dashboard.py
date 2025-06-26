@@ -1,3 +1,4 @@
+
 # dashboard.py  •  Painel JFL Comercial
 # -------------------------------------------------------------
 # Executar local:  streamlit run dashboard.py
