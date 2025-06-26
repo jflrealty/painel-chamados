@@ -2,6 +2,9 @@
 # -------------------------------------------------------------
 # Executar local:  streamlit run dashboard.py
 # -------------------------------------------------------------
+from dotenv import load_dotenv
+load_dotenv()
+
 import os, io, re, json
 import pandas as pd
 import streamlit as st
