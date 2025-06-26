@@ -41,22 +41,21 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
     return out
 
 
-def carregar_dados():
+@st.cache_data(show_spinner=False)
+def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL")
     if not url:
         st.error("❌  DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
     try:
-        # 1️⃣  Cria o engine normalmente
         engine = create_engine(url, connect_args={"sslmode": "require"})
+        conn = engine.raw_connection()  # ⚠️ não usar `with` aqui
 
-        # 2️⃣  Usa o *raw_connection()* ⇢ devolve o objeto **DB-API**
-        #     – esse sim possui .cursor(), então o pandas não se confunde
-        with engine.raw_connection() as conn:           # ← chave do problema!
+        try:
             df = pd.read_sql("SELECT * FROM ordens_servico", conn)
-            #            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^
-            #            → query É string                → conn é DB-API
+        finally:
+            conn.close()  # 🧹 fechando explicitamente a conexão
 
     except Exception as e:
         st.error(f"❌  Erro ao ler o banco: {e}")
