@@ -41,7 +41,7 @@ def carregar_dados():
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
         with engine.connect() as conn:
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
+            df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -49,27 +49,30 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    # Proteção contra colunas ausentes
-    for col in ["responsavel", "solicitante", "capturado_por", "data_abertura", "data_fechamento"]:
+    # Proteção para colunas ausentes
+    for col in ["responsavel", "solicitante", "capturado_por", "data_abertura", "data_fechamento", "log_edicoes"]:
         if col not in df.columns:
             df[col] = None
 
+    # Aplicar nomes reais
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
+    df["capturado_nome"]  = df["capturado_por"].apply(get_nome_real)
 
-    df["data_abertura"]    = pd.to_datetime(df["data_abertura"], errors="coerce")
-    df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
+    # Datas e SLA
+    df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
+    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
+    # Processar log_edicoes
     registros = []
     for _, row in df.iterrows():
-        if pd.notna(row.get("log_edicoes")):
+        if pd.notna(row["log_edicoes"]):
             try:
                 log = json.loads(row["log_edicoes"])
                 for campo, mudanca in log.items():
                     registros.append({
-                        "id": row["id"],
+                        "id": row.get("id"),
                         "campo": campo,
                         "de": str(mudanca.get("de")),
                         "para": str(mudanca.get("para")),
@@ -77,7 +80,7 @@ def carregar_dados():
                         "data_abertura": row.get("data_abertura"),
                     })
             except Exception as e:
-                print("Erro no log_edicoes:", e)
+                print("Erro ao processar log_edicoes:", e)
 
     df_alt = pd.DataFrame(registros)
     return df, df_alt
@@ -85,10 +88,10 @@ def carregar_dados():
 # ===== CHAMAR E VERIFICAR DADOS =====
 df, df_alt = carregar_dados()
 
-if df is None or df.empty:
+if df.empty:
     st.warning("📭 Nenhum dado encontrado. Verifique a conexão ou os filtros aplicados.")
     st.stop()
-
+    
 # ---------- SIDEBAR FILTERS ----------
 if not df.empty:
     st.sidebar.markdown("## 🎛️ Filtros")
