@@ -40,14 +40,18 @@ def carregar_dados():
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        with engine.connect() as con:
-            df = pd.read_sql("SELECT * FROM ordens_servico", con=con)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
+
+    # Proteção contra colunas ausentes
+    for col in ["responsavel", "solicitante", "capturado_por", "data_abertura", "data_fechamento"]:
+        if col not in df.columns:
+            df[col] = None
 
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
@@ -68,16 +72,14 @@ def carregar_dados():
                         "campo": campo,
                         "de": str(mudanca.get("de")),
                         "para": str(mudanca.get("para")),
-                        "responsavel_nome": row["responsavel_nome"],
-                        "data_abertura": row["data_abertura"],
+                        "responsavel_nome": row.get("responsavel_nome", ""),
+                        "data_abertura": row.get("data_abertura"),
                     })
             except Exception as e:
                 print("Erro no log_edicoes:", e)
     df_alt = pd.DataFrame(registros)
 
     return df, df_alt
-
-df, df_alt = carregar_dados()
 
 # ---------- SIDEBAR FILTERS ----------
 if not df.empty:
