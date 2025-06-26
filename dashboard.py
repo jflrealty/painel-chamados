@@ -39,9 +39,8 @@ def carregar_dados():
         return pd.DataFrame(), pd.DataFrame()
 
     engine = create_engine(url, connect_args={"sslmode": "require"})
-
     try:
-        with engine.connect() as con:
+        with engine.connect() as con:  # <- uso correto
             df = pd.read_sql("SELECT * FROM ordens_servico", con=con)
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
@@ -50,6 +49,7 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
+    # --- enrich ---
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]  = df["capturado_por"].apply(get_nome_real)
@@ -58,80 +58,94 @@ def carregar_dados():
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
+    # --- log_edicoes em linhas ---
     registros = []
     for _, row in df.iterrows():
         if pd.notna(row.get("log_edicoes")):
             try:
                 log = json.loads(row["log_edicoes"])
                 for campo, mudanca in log.items():
-                    registros.append({
-                        "id": row["id"],
-                        "campo": campo,
-                        "de": str(mudanca.get("de")),
-                        "para": str(mudanca.get("para")),
-                        "responsavel_nome": row["responsavel_nome"],
-                        "data_abertura": row["data_abertura"],
-                    })
+                    registros.append(
+                        {
+                            "id": row["id"],
+                            "campo": campo,
+                            "de": str(mudanca.get("de")),
+                            "para": str(mudanca.get("para")),
+                            "responsavel_nome": row["responsavel_nome"],
+                            "data_abertura": row["data_abertura"],
+                        }
+                    )
             except Exception as e:
                 print("Erro no log_edicoes:", e)
     df_alt = pd.DataFrame(registros)
 
     return df, df_alt
 
+
 df, df_alt = carregar_dados()
 
+# ---------- early-exit se vazio ----------
+if df.empty:
+    st.warning("📭 Nenhum chamado encontrado no período / filtros selecionados.")
+    st.stop()
+
 # ---------- SIDEBAR FILTERS ----------
-if not df.empty:
-    st.sidebar.markdown("## 🎛️ Filtros")
+st.sidebar.markdown("## 🎛️ Filtros")
 
-    min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
-    d_ini, d_fim = st.sidebar.date_input("🗓️ Intervalo de abertura:", [min_d, max_d])
-    if d_ini and d_fim:
-        df = df[df["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
+d_ini, d_fim = st.sidebar.date_input("🗓️ Intervalo de abertura:", [min_d, max_d])
+if d_ini and d_fim:
+    df = df[df["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+    if not df_alt.empty and "data_abertura" in df_alt.columns:
+        df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
 
-        if not df_alt.empty and "data_abertura" in df_alt.columns:
-            df_alt = df_alt[df_alt["data_abertura"].between(pd.to_datetime(d_ini), pd.to_datetime(d_fim))]
+resp_opts = sorted(df["responsavel_nome"].dropna().unique())
+resp_sel = st.sidebar.multiselect("🧝 Responsável:", resp_opts)
+if resp_sel:
+    df = df[df["responsavel_nome"].isin(resp_sel)]
+    if not df_alt.empty and "responsavel_nome" in df_alt.columns:
+        df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
 
-    resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-    resp_sel = st.sidebar.multiselect("🧝 Responsável:", resp_opts)
-    if resp_sel:
-        df = df[df["responsavel_nome"].isin(resp_sel)]
-        if not df_alt.empty and "responsavel_nome" in df_alt.columns:
-            df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
-
-    if not df_alt.empty and "campo" in df_alt.columns:
-        campo_opts = sorted(df_alt["campo"].unique())
-        campo_sel = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
-        if campo_sel:
-            df_alt = df_alt[df_alt["campo"].isin(campo_sel)]
+if not df_alt.empty and "campo" in df_alt.columns:
+    campo_opts = sorted(df_alt["campo"].unique())
+    campo_sel = st.sidebar.multiselect("📝 Campo alterado:", campo_opts)
+    if campo_sel:
+        df_alt = df_alt[df_alt["campo"].isin(campo_sel)]
 
 # ---------- METRIC CARDS ----------
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total de Chamados</p></div>", unsafe_allow_html=True)
-df_status = df.get("status")
-em_analise = len(df[df_status.isin(["aberto", "em analise"])]) if df_status is not None else 0
+
+em_analise = len(df[df["status"].isin(["aberto", "em analise"])]) if "status" in df.columns else 0
 col2.markdown(f"<div class='card'><h3>{em_analise}</h3><p>Em Atendimento</p></div>", unsafe_allow_html=True)
-finalizados = len(df[df["data_fechamento"].notna()]) if "data_fechamento" in df.columns else 0
+
+if "data_fechamento" in df.columns:
+    finalizados = df["data_fechamento"].notna().sum()
+    sla_ok = (df["dias_para_fechamento"] <= 2).sum()
+    sla_nok = (df["dias_para_fechamento"] > 2).sum()
+else:
+    finalizados = sla_ok = sla_nok = 0
+
 col3.markdown(f"<div class='card'><h3>{finalizados}</h3><p>Finalizados</p></div>", unsafe_allow_html=True)
-sla_ok = len(df[df["dias_para_fechamento"] <= 2]) if "dias_para_fechamento" in df.columns else 0
 col4.markdown(f"<div class='card'><h3>{sla_ok}</h3><p>Dentro do SLA</p></div>", unsafe_allow_html=True)
-sla_nok = len(df[df["dias_para_fechamento"] > 2]) if "dias_para_fechamento" in df.columns else 0
 col5.markdown(f"<div class='card'><h3>{sla_nok}</h3><p>Fora do SLA</p></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ---------- CHARTS ----------
 st.subheader("📊 Distribuição de Chamados")
-if "tipo_ticket" in df.columns and not df.empty:
+
+if "tipo_ticket" in df.columns:
     fig1, ax1 = plt.subplots(figsize=(6,3))
     df["tipo_ticket"].value_counts().plot.bar(color="#3E84F4", ax=ax1)
     ax1.set_title("Chamados por Tipo de Ticket")
-    ax1.set_ylabel("Quantidade")
+    ax1.set_ylabel("Qtde")
     st.pyplot(fig1)
 
-fechados = df[df["data_fechamento"].notna()]
-tempo_medio = fechados["dias_para_fechamento"].mean()
-st.metric("🗓️ Tempo médio de fechamento", f"{tempo_medio:.1f} dias" if pd.notna(tempo_medio) else "-")
+# --- tempo médio ---
+fechados = df[df["data_fechamento"].notna()] if "data_fechamento" in df.columns else pd.DataFrame()
+tempo_medio = fechados["dias_para_fechamento"].mean() if not fechados.empty else None
+st.metric("🗓️ Tempo médio de fechamento", f"{tempo_medio:.1f} dias" if tempo_medio else "-")
 
 if not fechados.empty:
     fig2, ax2 = plt.subplots(figsize=(6,3))
@@ -154,18 +168,19 @@ else:
               .reset_index(name="qtd")
               .sort_values("qtd", ascending=False)
     )
-
     st.markdown("### 📊 Top alterações")
-    fig3, ax3 = plt.subplots(figsize=(8,4))
-    top_alt.head(10).plot(kind="bar", x="para", y="qtd", color="#FF7043", ax=ax3)
-    ax3.set_xlabel("Para")
-    ax3.set_ylabel("Quantidade")
-    ax3.set_title("Top 10 alterações (campo/de → para)")
-    st.pyplot(fig3)
+    try:
+        fig3, ax3 = plt.subplots(figsize=(6,3))
+        top_alt.head(10).plot(kind="bar", x="para", y="qtd", color="#FF7043", ax=ax3)
+        ax3.set_xlabel("Para")
+        ax3.set_ylabel("Qtde")
+        ax3.set_title("Top 10 alterações")
+        st.pyplot(fig3)
+    except Exception as e:
+        st.warning(f"Não deu para plotar o gráfico de alterações ({e}).")
 
 # ---------- EXPORT ----------
 st.subheader("📄 Exportar dados filtrados")
-
 csv_main  = df.to_csv(index=False).encode("utf-8")
 csv_alt   = df_alt.to_csv(index=False).encode("utf-8")
 
