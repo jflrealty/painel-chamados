@@ -3,7 +3,7 @@ import os, io, re, json, datetime as dt
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from utils.slack import get_nome_real
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
