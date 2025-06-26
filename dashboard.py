@@ -57,10 +57,9 @@ def carregar_dados():
         return pd.DataFrame(), pd.DataFrame()
 
     try:
-        engine = create_engine(url, connect_args={"sslmode": "require"}, future=True)
-        with engine.begin() as conn:
-            with engine.connect() as connection:
-                df = pd.read_sql("SELECT * FROM ordens_servico", con=connection)
+        engine = create_engine(url, connect_args={"sslmode": "require"})
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+
     except Exception as e:
         st.error(f"❌ Erro ao ler dados do banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
