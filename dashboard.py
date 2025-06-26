@@ -106,7 +106,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     # Garante driver psycopg2 e SSL
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        url = url.replace("postgres://", "postgresql://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
