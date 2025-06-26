@@ -200,6 +200,72 @@ c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><
 
 st.markdown("---")
 
+# -------------------------------------------------------------
+# 📄 GRADE DE CHAMADOS + THREAD ▸ colocar DEPOIS das métricas
+# -------------------------------------------------------------
+st.subheader("📄 Chamados (clique em uma linha)")
+
+cols_grade = [
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura",
+    "canal_id",   # ocultos na grade mas úteis
+    "thread_ts"
+]
+
+gb = GridOptionsBuilder.from_dataframe(df[cols_grade])
+gb.configure_pagination()
+gb.configure_default_column(resizable=True, filter=True, sortable=True)
+gb.configure_column("canal_id", hide=True)
+gb.configure_column("thread_ts", hide=True)
+gb.configure_selection("single")
+grid_resp = AgGrid(
+        df,
+        gridOptions=gb.build(),
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        height=300,
+        theme="streamlit",
+        fit_columns_on_grid_load=True)
+
+sel = grid_resp["selected_rows"]
+
+if sel:
+    r = sel[0]
+    os_id     = r["id"]
+    canal_id  = r.get("canal_id")
+    thread_ts = r.get("thread_ts")
+
+    st.markdown(f"### 📝 Detalhes OS {os_id}")
+    st.write(f"""
+    **Tipo:** {r.get('tipo_ticket','')}  •  **Status:** {r.get('status','')}
+    **Solicitante:** {r.get('solicitante_nome','')}
+    **Responsável:** {r.get('responsavel_nome','')}
+    **Abertura:** {pd.to_datetime(r['data_abertura']).strftime('%d/%m/%Y %H:%M')}
+    """)
+
+    # ------- Botão de ver thread -------
+    if st.button("💬 Ver thread Slack", key=f"btn_thread_{os_id}"):
+        if canal_id and thread_ts:
+            msgs = fetch_thread(canal_id, thread_ts)
+            if msgs:
+                st.success(f"{len(msgs)} mensagens encontradas")
+                st.markdown("---")
+                for m in msgs:
+                    ts   = pd.to_datetime(float(m["ts"]), unit="s")
+                    user = get_nome_real(m.get("user", ""))
+                    txt  = m.get("text", "")
+                    pin  = "📌 " if m["ts"] == thread_ts else ""
+                    bg   = "#E3F2FD" if pin else "#FFFFFF"
+                    st.markdown(
+                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
+                        f"<strong>{pin}{user}</strong> "
+                        f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
+                        unsafe_allow_html=True)
+            else:
+                st.info("Nenhuma mensagem encontrada.")
+        else:
+            st.warning("Sem canal/thread cadastrados para esta OS.")
+
 # ---- GRÁFICOS ----------------------------------------------
 st.subheader("📊 Distribuição e Fechamento")
 
@@ -233,77 +299,6 @@ with g2:
         for s in ax2.spines.values():
             s.set_visible(False)
         st.pyplot(fig2)
-
-# -------------------------------------------------------------
-# 📄 GRADE DE CHAMADOS + THREAD
-# -------------------------------------------------------------
-st.subheader("📄 Chamados (clique em uma linha)")
-
-cols_grade = [
-    "id",
-    "tipo_ticket",
-    "status",
-    "solicitante_nome",
-    "responsavel_nome",
-    "data_abertura",
-    "canal_id",
-    "thread_ts",
-]
-
-gb = GridOptionsBuilder.from_dataframe(df[cols_grade])
-gb.configure_pagination()
-gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_selection("single")
-
-grid_resp = AgGrid(
-    df,
-    gridOptions=gb.build(),
-    update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=300,
-    theme="streamlit",
-    fit_columns_on_grid_load=True,
-)
-
-sel = grid_resp["selected_rows"]
-
-if sel:
-    r = sel[0]
-    os_id = r["id"]
-    canal_id = r.get("canal_id")
-    thread_ts = r.get("thread_ts")
-
-    st.markdown(f"### 📝 Detalhes OS {os_id}")
-    st.write(
-        f"""
-        **Tipo:** {r.get('tipo_ticket','')}  •  **Status:** {r.get('status','')}  
-        **Solicitante:** {r.get('solicitante_nome','')}  
-        **Responsável:** {r.get('responsavel_nome','')}  
-        **Abertura:** {pd.to_datetime(r['data_abertura']).strftime('%d/%m/%Y %H:%M')}
-        """
-    )
-
-    if st.button("💬 Ver thread Slack", key=f"btn_thread_{os_id}"):
-        if canal_id and thread_ts:
-            msgs = fetch_thread(canal_id, thread_ts)
-            if msgs:
-                st.success(f"{len(msgs)} mensagens encontradas")
-                st.markdown("---")
-                for m in msgs:
-                    ts = pd.to_datetime(float(m["ts"]), unit="s")
-                    user = get_nome_real(m.get("user", ""))
-                    txt = m.get("text", "")
-                    pin = "📌 " if m["ts"] == thread_ts else ""
-                    bg = "#E3F2FD" if pin else "#FFFFFF"
-                    st.markdown(
-                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                        f"<strong>{pin}{user}</strong> <span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.info("Nenhuma mensagem encontrada.")
-        else:
-            st.warning("Sem canal/thread cadastrados para esta OS.")
 
 # -------------------------------------------------------------
 # 🔄 ALTERAÇÕES
