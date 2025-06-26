@@ -14,6 +14,7 @@ from utils.slack import get_nome_real              # helper de nomes reais
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from sqlalchemy import text
 
 # -------------------------------------------------------------
 # CONFIG STREAMLIT  +  SLACK CLIENT
@@ -84,9 +85,6 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
 # -------------------------------------------------------------
 # LOAD DATA (com cache)
 # -------------------------------------------------------------
-
-from sqlalchemy import text
-
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL")
@@ -96,8 +94,8 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, connect_args={"sslmode": "require"})
-        with engine.connect().execution_options(stream_results=True) as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
+        with engine.connect() as conn:  # ✅ conexão simples, segura e compatível
+            df = pd.read_sql("SELECT * FROM ordens_servico", conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
