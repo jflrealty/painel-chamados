@@ -3,7 +3,7 @@ import os, io, re, json, datetime as dt
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from utils.slack import get_nome_real
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
@@ -41,21 +41,22 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
     return out
 
 
-@st.cache_data(show_spinner=False)
-def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    url = os.getenv("DATA_PUBLIC_URL")          # p.ex.
+def carregar_dados():
+    url = os.getenv("DATA_PUBLIC_URL")
     if not url:
         st.error("❌  DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
     try:
-        # 1) Engine normal, sem hacks
+        # 1️⃣  Cria o engine normalmente
         engine = create_engine(url, connect_args={"sslmode": "require"})
 
-        # 2) Conexão via context-manager (NÃO é Engine!):
-        with engine.connect() as conn:
-            # pandas aceita diretamente o objeto Connection 😊
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), con=conn)
+        # 2️⃣  Usa o *raw_connection()* ⇢ devolve o objeto **DB-API**
+        #     – esse sim possui .cursor(), então o pandas não se confunde
+        with engine.raw_connection() as conn:           # ← chave do problema!
+            df = pd.read_sql("SELECT * FROM ordens_servico", conn)
+            #            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^
+            #            → query É string                → conn é DB-API
 
     except Exception as e:
         st.error(f"❌  Erro ao ler o banco: {e}")
