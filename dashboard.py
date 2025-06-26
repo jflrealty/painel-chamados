@@ -104,22 +104,24 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         st.error("❌ DATA_PUBLIC_URL não definida nos secrets / env vars.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # Garante driver psycopg2 + SSL
+    # Garante driver psycopg2 e SSL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
-        engine = create_engine(url, pool_pre_ping=True)
-        # pandas usa o engine diretamente (evita erro de cursor) 🛠️
-        df = pd.read_sql(text("SELECT * FROM ordens_servico"), engine)
+        engine = create_engine(url)
+        with engine.connect() as conn:
+            df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
+
+    return df, pd.DataFrame()
 
     # ----- limpeza / colunas obrigatórias -------------------------
     obrigatorias = [
