@@ -182,44 +182,46 @@ c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><
 
 st.markdown("---")
 
-# ------------------------------------------------------------------------
-# GRÁFICOS
-# ------------------------------------------------------------------------
+# -------------------------- GRÁFICOS ------------------------------------
 st.subheader("📊 Distribuição de Chamados")
-if "tipo_ticket" in df.columns and not df.empty:
-    fig1, ax1 = plt.subplots(figsize=(6,3))
-    df["tipo_ticket"].value_counts().plot.bar(ax=ax1, color="#3E84F4")
-    ax1.set_ylabel("Qtd")
-    st.pyplot(fig1)
 
-fechados = df[df["data_fechamento"].notna()]
-st.metric("🗓️ Tempo médio de fechamento",
-          f"{fechados['dias_para_fechamento'].mean():.1f} dias" if not fechados.empty else "-")
+col1, col2 = st.columns(2)
 
-if not fechados.empty:
-    fig2, ax2 = plt.subplots(figsize=(6,3))
-    fechados["dias_para_fechamento"].hist(ax=ax2, bins=10, color="#34A853")
-    ax2.set_xlabel("Dias"); ax2.set_ylabel("Chamados")
-    st.pyplot(fig2)
+with col1:
+    if "tipo_ticket" in df.columns and not df.empty:
+        fig, ax = plt.subplots(figsize=(4,2.5))
+        df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4")
+        ax.set_ylabel("Qtd")
+        ax.set_xlabel("")
+        ax.set_title("Por Tipo de Ticket", fontsize=10)
+        ax.tick_params(axis='x', labelrotation=45)
+        st.pyplot(fig)
 
-# ------------------------------------------------------------------------
+with col2:
+    fech = df[df["data_fechamento"].notna()]
+    st.metric("🗓️ Tempo médio de fechamento",
+              f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
+
+    if not fech.empty:
+        fig2, ax2 = plt.subplots(figsize=(4,2.5))
+        fech["dias_para_fechamento"].hist(ax=ax2, bins=10, color="#34A853")
+        ax2.set_xlabel("Dias")
+        ax2.set_ylabel("Chamados")
+        ax2.set_title("Dias até Fechamento", fontsize=10)
+        st.pyplot(fig2)
+
 # ALTERAÇÕES
 # ------------------------------------------------------------------------
-st.markdown("## 🔄 Alterações (edições + reaberturas)")
-if df_alt.empty:
-    st.info("Não há alterações para o filtro atual.")
-else:
-    view = (df_alt[["id","quando","quem","descricao"]]
-            .rename(columns={"id":"OS","quando":"Data",
-                             "quem":"Usuário","descricao":"Alteração"}))
-    st.dataframe(view, use_container_width=True)
-
     top = (df_alt["quem"].value_counts().head(10)
            .rename_axis("Usuário").reset_index(name="Qtd"))
-    fig3, ax3 = plt.subplots(figsize=(6,3))
-    top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
-    ax3.invert_yaxis(); ax3.set_xlabel("Alterações")
-    st.pyplot(fig3)
+    col_alter = st.columns(1)[0]
+    with col_alter:
+        fig3, ax3 = plt.subplots(figsize=(4,2.5))
+        top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
+        ax3.invert_yaxis()
+        ax3.set_xlabel("Alterações")
+        ax3.set_title("Top Alteradores", fontsize=10)
+        st.pyplot(fig3)
 
 # ------------------------------------------------------------------------
 # EXPORT
