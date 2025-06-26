@@ -129,41 +129,42 @@ if df.empty:
 # ---------- SIDEBAR -----------
 st.sidebar.markdown("## 🎛️ Filtros")
 
-# 1) datas min / max do próprio DataFrame  --------------------------
-min_abertura = pd.to_datetime(df["data_abertura"], errors="coerce").dt.tz_localize(None)
-min_d, max_d = min_abertura.min().date(), min_abertura.max().date()
-
-# 2) widget devolve date → converta p/ Timestamp (naive) ------------
-d_ini, d_fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
-d_ini = pd.Timestamp(d_ini)  .tz_localize(None)
-d_fim = pd.Timestamp(d_fim)  .tz_localize(None)
-
-# 3) normaliza a coluna que será filtrada ---------------------------
-df["data_abertura"]  = pd.to_datetime(df["data_abertura"],  errors="coerce").dt.tz_localize(None)
+# 1) converter coluna para datetime sem timezone
+df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce").dt.tz_localize(None)
 if not df_alt.empty:
     df_alt["data_abertura"] = pd.to_datetime(df_alt["data_abertura"], errors="coerce").dt.tz_localize(None)
 
-# 4) aplica o .between sem conflito de tipos ------------------------
-mask   = df["data_abertura"].between(d_ini, d_fim)
-df     = df[mask]
+# 2) valores válidos para filtro
+valid_dates = df["data_abertura"].dropna()
+if valid_dates.empty:
+    st.warning("📭 Nenhuma data de abertura válida encontrada.")
+    st.stop()
 
+min_d = valid_dates.min().date()
+max_d = valid_dates.max().date()
+
+# 3) widget de seleção de datas
+date_range = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
+
+# 4) garantir datetime64[ns] sem timezone
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    d_ini = pd.Timestamp(date_range[0]).replace(tzinfo=None)
+    d_fim = pd.Timestamp(date_range[1]).replace(tzinfo=None)
+else:
+    d_ini = pd.Timestamp(date_range).replace(tzinfo=None)
+    d_fim = d_ini
+
+# 5) aplicar filtros com segurança
+df = df[df["data_abertura"].between(d_ini, d_fim)]
 if not df_alt.empty:
     df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)]
 
-# agora a comparação não explode 🙂
-mask   = df["data_abertura"].between(d_ini, d_fim)
-df     = df[mask]
-df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)] if not df_alt.empty else df_alt
-
-
-resp_sel = st.sidebar.multiselect(
-    "🧑‍💼 Responsável:",
-    sorted(df["responsavel_nome"].dropna().unique())
-)
+# 6) filtro por responsável
+resp_sel = st.sidebar.multiselect("🧑‍💼 Responsável:", sorted(df["responsavel_nome"].dropna().unique()))
 if resp_sel:
-    df     = df[df["responsavel_nome"].isin(resp_sel)]
-    df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)] if not df_alt.empty else df_alt
-
+    df = df[df["responsavel_nome"].isin(resp_sel)]
+    if not df_alt.empty:
+        df_alt = df_alt[df_alt["responsavel_nome"].isin(resp_sel)]
 # ---------- METRIC CARDS -------
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", unsafe_allow_html=True)
