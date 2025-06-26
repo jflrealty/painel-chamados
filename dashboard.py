@@ -133,21 +133,27 @@ if df.empty:
     st.warning("📭 Nenhum dado encontrado.")
     st.stop()
 
-# ---------- SIDEBAR -----------
+
 # ---------- SIDEBAR -----------
 st.sidebar.markdown("## 🎛️ Filtros")
 min_d, max_d = df["data_abertura"].min(), df["data_abertura"].max()
+
+# Força datas padrão caso o dataframe esteja vazio ou as datas estejam com erro
+if pd.isna(min_d): min_d = pd.Timestamp.today() - pd.Timedelta(days=30)
+if pd.isna(max_d): max_d = pd.Timestamp.today()
+
 d_ini, d_fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
 
-# ✅ Força conversão para tipo compatível com datetime64[ns]
+# ✅ Conversão para Timestamp
+if isinstance(d_ini, list): d_ini, d_fim = d_ini
 d_ini = pd.to_datetime(d_ini)
 d_fim = pd.to_datetime(d_fim)
 
-if d_ini and d_fim:
-    mask = df["data_abertura"].between(d_ini, d_fim)
-    df = df[mask]
-    if not df_alt.empty:
-        df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)]
+# Aplica filtro com tipos compatíveis
+mask = df["data_abertura"].between(d_ini, d_fim)
+df = df[mask]
+if not df_alt.empty:
+    df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)]
 
 resp = st.sidebar.multiselect("🧑‍💼 Responsável:", sorted(df["responsavel_nome"].dropna().unique()))
 if resp:
