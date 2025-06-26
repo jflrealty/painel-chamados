@@ -129,23 +129,26 @@ if df.empty:
 # ---------- SIDEBAR -----------
 st.sidebar.markdown("## 🎛️ Filtros")
 
-# datas mín / máx já como Timestamp -> converta p/ .date() só para exibir
-min_d = df["data_abertura"].min().date()
-max_d = df["data_abertura"].max().date()
+# 1) datas min / max do próprio DataFrame  --------------------------
+min_abertura = pd.to_datetime(df["data_abertura"], errors="coerce").dt.tz_localize(None)
+min_d, max_d = min_abertura.min().date(), min_abertura.max().date()
 
-date_range = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
+# 2) widget devolve date → converta p/ Timestamp (naive) ------------
+d_ini, d_fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d])
+d_ini = pd.Timestamp(d_ini)  .tz_localize(None)
+d_fim = pd.Timestamp(d_fim)  .tz_localize(None)
 
-# → sempre volte a Timestamps **sem** timezone
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    d_ini, d_fim = [pd.Timestamp(d).tz_localize(None) for d in date_range]
-else:  # quando o usuário escolhe só um dia
-    d_ini = pd.Timestamp(date_range).tz_localize(None)
-    d_fim = d_ini
-
-# normalize também a série — remove qualquer timezone acidental
-df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce").dt.tz_localize(None)
+# 3) normaliza a coluna que será filtrada ---------------------------
+df["data_abertura"]  = pd.to_datetime(df["data_abertura"],  errors="coerce").dt.tz_localize(None)
 if not df_alt.empty:
     df_alt["data_abertura"] = pd.to_datetime(df_alt["data_abertura"], errors="coerce").dt.tz_localize(None)
+
+# 4) aplica o .between sem conflito de tipos ------------------------
+mask   = df["data_abertura"].between(d_ini, d_fim)
+df     = df[mask]
+
+if not df_alt.empty:
+    df_alt = df_alt[df_alt["data_abertura"].between(d_ini, d_fim)]
 
 # agora a comparação não explode 🙂
 mask   = df["data_abertura"].between(d_ini, d_fim)
