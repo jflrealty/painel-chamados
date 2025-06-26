@@ -40,24 +40,25 @@ def parse_reaberturas(txt: str, os_id: int, resp: str, data_abertura):
                      responsavel_nome=resp, data_abertura=data_abertura))
     return out
 
-# ---------- LOAD DATA ---------------------------------------------------
+
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    url = os.getenv("DATA_PUBLIC_URL")
+    url = os.getenv("DATA_PUBLIC_URL")          # p.ex.
     if not url:
-        st.error("❌ Variável DATA_PUBLIC_URL não definida.")
+        st.error("❌  DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
     try:
-        # 1) cria o engine normalmente
+        # 1) Engine normal, sem hacks
         engine = create_engine(url, connect_args={"sslmode": "require"})
 
-        # 2) usa o raw_connection (DB-API) p/ evitar o bug do .cursor
-        with engine.raw_connection() as raw_conn:
-            df = pd.read_sql("SELECT * FROM ordens_servico", con=raw_conn)
+        # 2) Conexão via context-manager (NÃO é Engine!):
+        with engine.connect() as conn:
+            # pandas aceita diretamente o objeto Connection 😊
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), con=conn)
 
     except Exception as e:
-        st.error(f"❌ Erro ao ler banco: {e}")
+        st.error(f"❌  Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
