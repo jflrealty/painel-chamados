@@ -100,39 +100,38 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
+from sqlalchemy import create_engine, text  # text é opcional aqui, mas útil p/ queries maiores
+
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Lê dados de ordens_servico e retorna (principal, alterações)."""
+    """Lê dados de ordens_servico e devolve (df principal, df de alterações)."""
     url = os.getenv("DATA_PUBLIC_URL", "")
     if not url:
         st.error("❌ DATA_PUBLIC_URL não definida nos secrets / env vars.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # Garante driver psycopg2 e SSL
+    # ► adapta URL antiga do Railway e força SSL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
-        # Cria engine com SQLAlchemy
-        engine = create_engine(url, connect_args={"sslmode": "require"})
+        engine = create_engine(url, pool_pre_ping=True)
 
-        # 🔥 AQUI: a query precisa ser uma string SQL
-        query = "SELECT * FROM ordens_servico"
-
-        with engine.begin() as conn:
-            df = pd.read_sql(query, con=conn)
+        sql = "SELECT * FROM ordens_servico"        # <-- string, SEM objeto Connection!
+        with engine.begin() as conn:                # begin() → transação read-only
+            df = pd.read_sql(sql, conn)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
+        # aqui podemos retornar vazio; não faz sentido processar
         return df, pd.DataFrame()
 
-    return df, pd.DataFrame()
-
+    # ---------- garante colunas obrigatórias ----------
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
         "data_abertura", "data_fechamento",
@@ -140,38 +139,42 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         "data_ultima_edicao", "ultimo_editor",
     ]
     for col in obrig:
-        df.setdefault(col, None)
+        if col not in df.columns:
+            df[col] = None
 
-    # nomes legíveis + datas
+    # ---------- colunas derivadas ----------
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
-    df["data_abertura"]    = pd.to_datetime(df["data_abertura"],  errors="coerce")
-    df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
+
+    df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
+    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # edições + reaberturas
-    regs: list[dict] = []
+    # ---------- monta df_alt (edições + reaberturas) ----------
+    registros: list[dict] = []
     for _, r in df.iterrows():
+
+        # edições (JSON)
         if r["log_edicoes"]:
             try:
-                log = json.loads(r["log_edicoes"])
-                for campo, mud in log.items():
-                    regs.append(
-                        dict(
-                            id=r["id"],
-                            quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
-                            quem=r["ultimo_editor"] or "-",
-                            descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
-                            campo=campo,
-                            de=mud.get("de"), para=mud.get("para"),
-                            responsavel_nome=r["responsavel_nome"],
-                            data_abertura=r["data_abertura"],
-                        )
-                    )
-            except Exception:
+                for campo, mud in json.loads(r["log_edicoes"]).items():
+                    registros.append({
+                        "id": r["id"],
+                        "quando": pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
+                        "quem": r["ultimo_editor"] or "-",
+                        "descricao": f"{campo}: {mud.get('de')} → {mud.get('para')}",
+                        "campo": campo,
+                        "de": mud.get("de"),
+                        "para": mud.get("para"),
+                        "responsavel_nome": r["responsavel_nome"],
+                        "data_abertura": r["data_abertura"],
+                    })
+            except (ValueError, TypeError):
                 pass
-        regs += parse_reaberturas(
+
+        # reaberturas (texto)
+        registros += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
             r["responsavel_nome"],
@@ -179,10 +182,11 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         )
 
     df_alt = (
-        pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
+        pd.DataFrame(registros).sort_values("quando", ascending=False)
+        if registros else pd.DataFrame()
     )
-    return df, df_alt
 
+    return df, df_alt
 # ───────────────────────── Main Application ─────────────────────────
 df, df_alt = carregar_dados()
 if df.empty:
