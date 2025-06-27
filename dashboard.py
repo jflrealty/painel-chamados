@@ -118,10 +118,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, pool_pre_ping=True)
-
-        sql = "SELECT * FROM ordens_servico"        # <-- string, SEM objeto Connection!
-        with engine.begin() as conn:                # begin() → transação read-only
-            df = pd.read_sql(sql, conn)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
