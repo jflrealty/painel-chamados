@@ -99,9 +99,10 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         st.error(f"Erro Slack: {e.response['error']}")
         return []
 
-# ───────────────────────────── Load Data ──────────────────────────────
+# ─────────────────────────── Data Loading ───────────────────────────
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
+
     url = os.getenv("DATA_PUBLIC_URL", "")
     if not url:
         st.error("❌ DATA_PUBLIC_URL não definida.")
@@ -114,14 +115,14 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         url += "?sslmode=require"
 
     try:
-        # Engine com pool & ping
+        # Engine com pool & keep-alive
         engine = create_engine(url, pool_pre_ping=True)
 
+        # ✅ basta uma string
         sql = "SELECT * FROM ordens_servico"
 
-        # ✅ devolve DB-API connection (tem .cursor)
-        with engine.raw_connection() as raw_conn:
-            df = pd.read_sql(sql, raw_conn)
+        # 👉 pandas lida com o engine; ele mesmo abre/fecha a conexão
+        df = pd.read_sql(sql, engine)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
@@ -130,8 +131,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    # ... resto do tratamento (colunas obrigatórias, df_alt etc.)
-    # -----------------------------------------------------------------
+    # --------------------------- tratamento ---------------------------
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
         "data_abertura", "data_fechamento",
@@ -147,12 +147,11 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
     df["data_abertura"]    = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
-    df["dias_para_fechamento"] = (df["data_fechamento"]-df["data_abertura"]).dt.days
+    df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # ---------- monta df_alt ----------
+    # ----------- monta df_alt (edições + reaberturas) ----------------
     regs: list[dict] = []
     for _, r in df.iterrows():
-        # edições (log_edicoes)
         if r["log_edicoes"]:
             try:
                 for campo, mud in json.loads(r["log_edicoes"]).items():
@@ -170,7 +169,6 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
             except Exception:
                 pass
 
-        # reaberturas
         regs += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
