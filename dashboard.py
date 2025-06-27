@@ -102,22 +102,36 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
 # ─────────────────────────── Data Loading ───────────────────────────
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Lê ordens_servico e monta df & df_alt."""
-    url = DATA_PUBLIC_URL.replace("postgres://", "postgresql://", 1)
+    """Lê dados de ordens_servico e retorna (principal, alterações)."""
+    url = os.getenv("DATA_PUBLIC_URL", "")
+    if not url:
+        st.error("❌ DATA_PUBLIC_URL não definida nos secrets / env vars.")
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Garante driver psycopg2 e SSL
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
-        engine = create_engine(url, pool_pre_ping=True)
-        # pandas + engine + text() evita o erro de cursor
-        with engine.connect() as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
+        # Cria engine com SQLAlchemy
+        engine = create_engine(url, connect_args={"sslmode": "require"})
+
+        # 🔥 AQUI: a query precisa ser uma string SQL
+        query = "SELECT * FROM ordens_servico"
+
+        with engine.begin() as conn:
+            df = pd.read_sql(query, con=conn)
+
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
+
+    return df, pd.DataFrame()
 
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
