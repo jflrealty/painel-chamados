@@ -3,16 +3,14 @@
 # -------------------------------------------------------------
 """
 Streamlit dashboard para acompanhar os chamados comerciais JFL.
-Principais diferenças:
-• Conexão PostgreSQL estável (pandas lê direto do *engine* ► adeus
-  "'Connection' object has no attribute 'cursor'").
-• Tratamento de variáveis-de-ambiente (SLACK_BOT_TOKEN, DATA_PUBLIC_URL).
-• Limpeza geral, tipagem leve e comentários.
+• Conexão PostgreSQL estável (pandas + SQLAlchemy 2.x  ✔️)
+• Variáveis de ambiente SLACK_BOT_TOKEN / DATA_PUBLIC_URL tratadas
+• Thread Slack integrada, métricas, filtros, exportações
 """
 
 from __future__ import annotations
 
-# ----------------------------- Imports -----------------------------
+# ───────────────────────────── Imports ──────────────────────────────
 import os, io, json, re
 from datetime import date
 
@@ -20,32 +18,30 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text            # ← text é ESSENCIAL!
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-from utils.slack import get_nome_real  # helper já existente no repo
-# (precisa que SLACK_BOT_TOKEN exista ANTES do import acima)
+from utils.slack import get_nome_real                 # usa SLACK_BOT_TOKEN
 
-# -------------------------- Config inits ---------------------------
-load_dotenv()  # carrega .env e/ou secrets.toml
+# ─────────────────────── Variáveis de ambiente ──────────────────────
+load_dotenv()                                         # carrega .env / secrets.toml
 
-# ==== ENV VARS ====
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 DATA_PUBLIC_URL = os.getenv("DATA_PUBLIC_URL", "")
 
-# ---- sanity check ----
 if not DATA_PUBLIC_URL:
+    st.error("❌ DATA_PUBLIC_URL não definida nos secrets/env.")
     st.stop()
-if not SLACK_BOT_TOKEN:
-    st.warning("⚠️ SLACK_BOT_TOKEN não definido – nomes de usuários podem aparecer '–'.")
 
-# ---- Streamlit / Slack ----
+if not SLACK_BOT_TOKEN:
+    st.warning("⚠️ SLACK_BOT_TOKEN não definida – nomes de usuários poderão aparecer como '–'.")
+
+# ────────────────────────── Config Streamlit ────────────────────────
 st.set_page_config(page_title="Painel JFL", layout="wide")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-# ----------------------------- CSS ---------------------------------
 st.markdown(
     """
     <style>
@@ -62,12 +58,12 @@ st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", 
 st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</div>", True)
 st.markdown("---")
 
-# ---------------------------- Helpers -----------------------------
+# ───────────────────────────── Helpers ──────────────────────────────
 _reab = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
 
 def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str,
                       data_abertura: pd.Timestamp) -> list[dict]:
-    """Extrai linhas '[YYYY-MM-DD] Fulano …' → list[dict]."""
+    """Extrai linhas '[YYYY-MM-DD] Fulano …' para df_alt."""
     if not txt:
         return []
     regs: list[dict] = []
@@ -93,7 +89,7 @@ def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str,
 
 
 def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
-    """Baixa as msgs de uma thread Slack em ordem cronológica."""
+    """Baixa mensagens da thread Slack (cronológico)."""
     if not (channel_id and thread_ts and SLACK_BOT_TOKEN):
         return []
     try:
@@ -103,22 +99,19 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         st.error(f"Erro Slack: {e.response['error']}")
         return []
 
-# -------------------------- Data loading ---------------------------
-
+# ─────────────────────────── Data Loading ───────────────────────────
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Lê tabela ordens_servico e devolve (principal, alterações)."""
-    url = DATA_PUBLIC_URL
-    # corrigir URIs antigas do Railway
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+    """Lê ordens_servico e monta df & df_alt."""
+    url = DATA_PUBLIC_URL.replace("postgres://", "postgresql://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
         engine = create_engine(url, pool_pre_ping=True)
-        # 👉 pandas lê direto do *engine* (evita Connection.cursor)
-        df = pd.read_sql("SELECT * FROM ordens_servico", engine)
+        # pandas + engine + text() evita o erro de cursor
+        with engine.connect() as conn:
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
@@ -126,7 +119,6 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    # ----- colunas obrigatórias / normalização -----------------
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
         "data_abertura", "data_fechamento",
@@ -134,22 +126,19 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         "data_ultima_edicao", "ultimo_editor",
     ]
     for col in obrig:
-        if col not in df.columns:
-            df[col] = None
+        df.setdefault(col, None)
 
-    # ----- derivadas ------------------------------------------
+    # nomes legíveis + datas
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
-
-    df["data_abertura"]   = pd.to_datetime(df["data_abertura"],  errors="coerce")
-    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
+    df["data_abertura"]    = pd.to_datetime(df["data_abertura"],  errors="coerce")
+    df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # ----- df_alt (edições + reaberturas) ----------------------
+    # edições + reaberturas
     regs: list[dict] = []
     for _, r in df.iterrows():
-        # edições
         if r["log_edicoes"]:
             try:
                 log = json.loads(r["log_edicoes"])
@@ -168,22 +157,25 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
                     )
             except Exception:
                 pass
-        # reaberturas
         regs += parse_reaberturas(
-            r.get("historico_reaberturas"), r["id"], r["responsavel_nome"], r["data_abertura"]
+            r.get("historico_reaberturas"),
+            r["id"],
+            r["responsavel_nome"],
+            r["data_abertura"],
         )
 
-    df_alt = pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
+    df_alt = (
+        pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
+    )
     return df, df_alt
 
-# ----------------------- Main Application --------------------------
-
+# ───────────────────────── Main Application ─────────────────────────
 df, df_alt = carregar_dados()
 if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
-# -------------- Sidebar filters ------------------------------------
+# ─────────────── Sidebar • Filtros ───────────────
 today = date.today()
 min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
@@ -200,7 +192,7 @@ if sel_resp:
     if not df_alt.empty:
         df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
 
-# ---------------------------- Métricas ------------------------------
+# ─────────────────────────── Métricas ───────────────────────────────
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
 c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
@@ -210,19 +202,17 @@ c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><
 
 st.markdown("---")
 
-# ----------------------- Grade de chamados -------------------------
+# ──────────────────────── Grade de Chamados ─────────────────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-for col in ("canal_id", "thread_ts"):
-    if col not in df.columns:
-        df[col] = None
+for c in ("canal_id", "thread_ts"):
+    df.setdefault(c, None)
 
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
-
 gb = GridOptionsBuilder.from_dataframe(df[grid_cols])
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -239,14 +229,14 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 )["selected_rows"]
 
-# -------------------- Detalhes + Thread ----------------------------
+# ─────────────── Detalhes + Thread Slack ───────────────
 if sel:
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {r['id']}")
     st.write(
         f"""**Tipo:** {r.get('tipo_ticket','')}  •  **Status:** {r.get('status','')}
-**Solicitante:** {r.get('solicitante_nome','')}  
-**Responsável:** {r.get('responsavel_nome','')}  
+**Solicitante:** {r.get('solicitante_nome','')}
+**Responsável:** {r.get('responsavel_nome','')}
 **Abertura:** {pd.to_datetime(r['data_abertura']).strftime('%d/%m/%Y %H:%M')}"""
     )
 
@@ -263,17 +253,18 @@ if sel:
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                    f"<strong>{pin}{user}</strong> <span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
+                    f"<strong>{pin}{user}</strong> "
+                    f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
                     unsafe_allow_html=True,
                 )
         else:
-            st.info("Nenhuma mensagem encontrada / canal inválido.")
+            st.info("Nenhuma mensagem / canal inválido.")
 
-# ----------------------------- Gráficos ----------------------------
+# ─────────────────────────── Gráficos ───────────────────────────────
 st.subheader("📊 Distribuição e Fechamento")
-col1, col2 = st.columns(2)
+g1, g2 = st.columns(2)
 
-with col1:
+with g1:
     fig, ax = plt.subplots(figsize=(4, 2))
     df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4", width=0.5)
     ax.set_ylabel("Qtd", fontsize=8)
@@ -283,7 +274,7 @@ with col1:
     for s in ax.spines.values(): s.set_visible(False)
     st.pyplot(fig)
 
-with col2:
+with g2:
     fech = df[df["data_fechamento"].notna()]
     st.metric("🗓️ Tempo médio de fechamento",
               f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
@@ -297,18 +288,18 @@ with col2:
         for s in ax2.spines.values(): s.set_visible(False)
         st.pyplot(fig2)
 
-# -------------------------- Alterações -----------------------------
+# ───────────────────────── Alterações ───────────────────────────────
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
     st.info("Não há alterações para o filtro atual.")
 else:
     vis = df_alt.rename(columns={"id": "OS", "quando": "Data", "quem": "Usuário"})
-    cA, cB = st.columns([2, 1])
+    a1, a2 = st.columns([2, 1])
 
-    with cA:
+    with a1:
         st.dataframe(vis, use_container_width=True)
 
-    with cB:
+    with a2:
         top = vis["Usuário"].value_counts().head(10).rename_axis("Usuário").reset_index(name="Qtd")
         fig3, ax3 = plt.subplots(figsize=(4, 2))
         top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
@@ -319,9 +310,8 @@ else:
         for s in ax3.spines.values(): s.set_visible(False)
         st.pyplot(fig3)
 
-# ---------------------------- Export -------------------------------
+# ─────────────────────────── Export ────────────────────────────────
 st.subheader("📦 Exportar")
-
 csv_main = df.to_csv(index=False).encode()
 csv_alt  = df_alt.to_csv(index=False).encode()
 
