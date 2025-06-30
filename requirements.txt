@@ -1,9 +1,9 @@
 streamlit
-pandas
 psycopg2-binary
-sqlalchemy>=1.4,<2.0
 slack_sdk
 matplotlib
 xlsxwriter
 python-dotenv
 streamlit-aggrid
+sqlalchemy>=2.0
+pandas>=2.0
