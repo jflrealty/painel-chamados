@@ -183,10 +183,16 @@ gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
-sel = AgGrid(df, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED,
-             height=300, theme="streamlit", fit_columns_on_grid_load=True)["selected_rows"]
+sel = AgGrid(
+    df,
+    gridOptions=gb.build(),
+    update_mode=GridUpdateMode.SELECTION_CHANGED,
+    height=300,
+    theme="streamlit",
+    fit_columns_on_grid_load=True,
+).get("selected_rows", [])
 
-if sel is not None and len(sel) > 0:
+if sel:
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
     try:
