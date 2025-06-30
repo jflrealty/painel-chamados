@@ -104,6 +104,8 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
+from sqlalchemy import create_engine, text
+
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL", "")
@@ -118,7 +120,8 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
-        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
+        with engine.connect() as conn:
+            df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
