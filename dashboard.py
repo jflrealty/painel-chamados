@@ -104,7 +104,7 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
-import psycopg2  # ← certifica que o driver está presente
+from sqlalchemy import create_engine, text
 
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -121,9 +121,10 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
 
-        # CONEXÃO BRUTA ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-        with engine.raw_connection() as raw_conn:
-            df = pd.read_sql("SELECT * FROM ordens_servico", con=raw_conn)
+        # Usa connection + execute + fetchall — compatível com pandas 2.x
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT * FROM ordens_servico"))
+            df = pd.DataFrame(result.fetchall(), columns=result.keys())
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
