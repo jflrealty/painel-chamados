@@ -243,7 +243,7 @@ def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
 # ℹ️ Detalhes
-if sel and isinstance(sel[0], dict):
+if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
 
