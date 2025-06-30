@@ -21,27 +21,6 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
 from utils.slack import get_nome_real  # helper já existente
 
-
-st.subheader("🧪 Diagnóstico das colunas")
-
-# Lista de colunas reais
-st.code("\n".join(repr(col) for col in df.columns.tolist()), language="python")
-
-# Verifica quais estão realmente presentes no grid_cols
-grid_cols = [
-    "id", "tipo_ticket", "status",
-    "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts"
-]
-
-faltando = [c for c in grid_cols if c not in df.columns]
-if faltando:
-    st.error(f"❌ Colunas ausentes no DataFrame: {faltando}")
-else:
-    st.success("✅ Todas as colunas esperadas existem!")
-
-
-
 # ────────────────────── Ambiente ──────────────────────
 load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
@@ -221,35 +200,28 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# 🛡️ Sanitize colunas
+# 1) higieniza nomes de coluna **UMA vez** (sem .lower() pra não mudar snake_case)
 df.columns = (
-    pd.Series(df.columns)
-    .astype(str)
-    .str.strip()
-    .str.replace(r"[\n\r\t]", "", regex=True)
-    .str.replace("\ufeff", "")  # remove BOM
+    pd.Series(df.columns, dtype=str)
+      .str.strip()
+      .str.replace(r"[\n\r\t]", "", regex=True)
+      .str.replace("\ufeff", "")
 )
 
-# 🧱 Define colunas esperadas
+# 2) lista fixa que você quer na grade
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts"
+    "data_abertura", "canal_id", "thread_ts",
 ]
 
-# 🧩 Cria colunas ausentes
-for col in grid_cols:
-    if col not in df.columns:
-        df[col] = None
+# 3) cria de forma segura: reindex adiciona o que falta com None ✅
+df_grid = (
+    df.reindex(columns=grid_cols, fill_value=None)  # nunca gera KeyError
+      .copy()
+)
 
-# 🧪 Verifica antes de montar grid
-try:
-    df_grid = df[grid_cols].copy()
-except KeyError as e:
-    st.error(f"❌ Colunas faltando: {e}")
-    st.stop()
-
-# 🧰 Configura grid
+# 4) AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -257,7 +229,6 @@ gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
-# ▶️ Renderiza
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
