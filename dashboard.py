@@ -21,6 +21,27 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
 from utils.slack import get_nome_real  # helper já existente
 
+
+st.subheader("🧪 Diagnóstico das colunas")
+
+# Lista de colunas reais
+st.code("\n".join(repr(col) for col in df.columns.tolist()), language="python")
+
+# Verifica quais estão realmente presentes no grid_cols
+grid_cols = [
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura", "canal_id", "thread_ts"
+]
+
+faltando = [c for c in grid_cols if c not in df.columns]
+if faltando:
+    st.error(f"❌ Colunas ausentes no DataFrame: {faltando}")
+else:
+    st.success("✅ Todas as colunas esperadas existem!")
+
+
+
 # ────────────────────── Ambiente ──────────────────────
 load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
