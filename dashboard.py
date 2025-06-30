@@ -176,26 +176,16 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Define as colunas desejadas
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# Garante que todas as colunas existam no DataFrame
-for col in grid_cols:
-    if col not in df.columns:
-        df[col] = None
+# reindex garante todas as colunas e mantém a ordem desejada
+df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
 
-# Agora é seguro pegar as colunas desejadas
-try:
-    df_grid = df.loc[:, grid_cols].copy()
-except Exception as e:
-    st.error(f"Erro ao montar grade: {e}")
-    st.stop()
-
-# Monta a grade com AgGrid
+# ---------- AgGrid ----------
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -212,37 +202,36 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# Função segura para acessar campos
-def safe_get(row, col, default="-"):
-    try:
-        return row.get(col, default) if isinstance(row, dict) else default
-    except Exception:
-        return default
+# ---------- helper ----------
+def safe_get(row: dict, col: str, default="-"):
+    return row.get(col, default) if isinstance(row, dict) else default
 
-# Mostra os detalhes do chamado
-if isinstance(sel, list) and len(sel) > 0:
+# ---------- Detalhes ----------
+if sel:
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
     try:
-        abertura_fmt = pd.to_datetime(r.get("data_abertura", "")).strftime('%d/%m/%Y %H:%M')
+        abertura_fmt = pd.to_datetime(r.get("data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
         abertura_fmt = "-"
 
-    st.write(f"""**Tipo:** {safe_get(r, 'tipo_ticket')}  •  **Status:** {safe_get(r, 'status')}
-**Solicitante:** {safe_get(r, 'solicitante_nome')}
-**Responsável:** {safe_get(r, 'responsavel_nome')}
-**Abertura:** {abertura_fmt}""")
+    st.write(
+        f"""**Tipo:** {safe_get(r,'tipo_ticket')}  •  **Status:** {safe_get(r,'status')}
+**Solicitante:** {safe_get(r,'solicitante_nome')}
+**Responsável:** {safe_get(r,'responsavel_nome')}
+**Abertura:** {abertura_fmt}"""
+    )
 
-    if st.button("💬 Ver thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
-        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
+    if st.button("💬 Ver thread Slack", key=f"btn_thread_{safe_get(r,'id')}"):
+        msgs = fetch_thread(safe_get(r,"canal_id"), safe_get(r,"thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
-                ts = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user", ""))
-                txt = m.get("text", "")
-                pin = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
-                bg = "#E3F2FD" if pin else "#fff"
+                ts   = pd.to_datetime(float(m["ts"]), unit="s")
+                user = get_nome_real(m.get("user",""))
+                txt  = m.get("text","")
+                pin  = "📌 " if m["ts"] == safe_get(r,"thread_ts") else ""
+                bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
                     f"<strong>{pin}{user}</strong> "
