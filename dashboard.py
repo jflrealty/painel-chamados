@@ -111,6 +111,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         st.error("❌ DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
+    # Corrige protocolo e força SSL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
@@ -118,10 +119,11 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
-
         with engine.connect() as conn:
-            result = conn.execute(text("SELECT * FROM ordens_servico"))
-            df = pd.DataFrame(result.mappings().all())  # ✅ seguro no pandas 2.3
+            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
+
+        # 🧪 Loga as colunas carregadas
+        st.write("📌 Colunas carregadas do banco:", df.columns.tolist())
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
@@ -130,9 +132,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    return df, pd.DataFrame()
-
-    # --------------------------- tratamento ---------------------------
+    # 🔒 Cria colunas faltantes esperadas
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
         "data_abertura", "data_fechamento",
@@ -143,14 +143,17 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         if col not in df.columns:
             df[col] = None
 
-    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
-    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
+    # 🧠 Cria os nomes usando get_nome_real, com segurança
+    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real) if "responsavel" in df.columns else "-"
+    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real) if "solicitante" in df.columns else "-"
+    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real) if "capturado_por" in df.columns else "-"
+
+    # 🕓 Converte datas
     df["data_abertura"]    = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"]  = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # ----------- monta df_alt (edições + reaberturas) ----------------
+    # 🔁 Monta df_alt (edições + reaberturas)
     regs: list[dict] = []
     for _, r in df.iterrows():
         if r["log_edicoes"]:
@@ -160,10 +163,10 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
                         dict(
                             id=r["id"],
                             quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
-                            quem=r["ultimo_editor"] or "-",
+                            quem=r.get("ultimo_editor") or "-",
                             descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
                             campo=campo, de=mud.get("de"), para=mud.get("para"),
-                            responsavel_nome=r["responsavel_nome"],
+                            responsavel_nome=r.get("responsavel_nome", "-"),
                             data_abertura=r["data_abertura"],
                         )
                     )
@@ -173,7 +176,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         regs += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
-            r["responsavel_nome"],
+            r.get("responsavel_nome", "-"),
             r["data_abertura"],
         )
 
