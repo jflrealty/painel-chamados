@@ -104,9 +104,6 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session                     #  ← importa Session ORM
-
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL", "")
@@ -114,7 +111,6 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         st.error("❌ DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # adapta URI “postgres://” → “postgresql+psycopg2://” e força SSL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
@@ -123,17 +119,19 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
 
-        # ---------- SQLAlchemy 2-style ----------
-        with Session(engine) as session:
-            result = session.execute(text("SELECT * FROM ordens_servico"))
-            # mappings() → dicionários  ✓  compatível pandas 2.3
+        # ✅ compatível com pandas 2.3 + sqlalchemy 1.4.x
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT * FROM ordens_servico"))
             df = pd.DataFrame(result.mappings().all())
+
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
     if df.empty:
         return df, pd.DataFrame()
+
+    ...
 
     # --------------------------- tratamento ---------------------------
     obrig = [
