@@ -104,7 +104,7 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
-from sqlalchemy import create_engine, text
+import psycopg2
 
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -120,7 +120,9 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
-        with engine.connect() as conn:
+
+        # Usa raw_connection() — necessário com SQLAlchemy 1.4.x + psycopg2
+        with engine.raw_connection() as conn:
             df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
 
     except Exception as e:
