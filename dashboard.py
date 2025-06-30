@@ -238,7 +238,7 @@ st.markdown("##### ")
 btn_thread = st.button("💬 Ver Thread (registro selecionado)")
 
 # --------­ Detalhes + thread
-if sel and isinstance(sel[0], dict):
+if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
 
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
