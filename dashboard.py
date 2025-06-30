@@ -1,14 +1,16 @@
 # -------------------------------------------------------------
-# dashboard.py  •  Painel JFL Comercial – revisão 2025-06-30
+# dashboard.py  •  Painel JFL Comercial
 # -------------------------------------------------------------
 """
-Streamlit dashboard para acompanhar os chamados comerciais JFL.
-• Conexão PostgreSQL estável (pandas + SQLAlchemy ≥ 2.x)
-• Variáveis de ambiente SLACK_BOT_TOKEN / DATA_PUBLIC_URL tratadas
-• Thread Slack integrada, métricas, filtros, exportações
+Painel Streamlit para acompanhar chamados comerciais JFL
+• Conexão PostgreSQL (SQLAlchemy ≥2)                         ✔️
+• Variáveis SLACK_BOT_TOKEN / DATA_PUBLIC_URL tratadas       ✔️
+• Thread Slack integrada + métricas, filtros, exportações    ✔️
 """
 
 from __future__ import annotations
+
+# ═══════════════════════ Imports ═══════════════════════════
 import os, io, json, re
 from datetime import date
 
@@ -20,9 +22,10 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
-from utils.slack import get_nome_real                                    # fun helpers
 
-# ─────────────────────── Ambiente ───────────────────────
+from utils.slack import get_nome_real
+
+# ═══════════════ Ambiente / tokens ═════════════════════════
 load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 DATA_PUBLIC_URL = os.getenv("DATA_PUBLIC_URL", "")
@@ -30,18 +33,35 @@ DATA_PUBLIC_URL = os.getenv("DATA_PUBLIC_URL", "")
 if not DATA_PUBLIC_URL:
     st.error("❌ DATA_PUBLIC_URL não definida.")
     st.stop()
+
 if not SLACK_BOT_TOKEN:
-    st.warning("⚠️ SLACK_BOT_TOKEN não definida – nomes de usuários poderão aparecer como “–”.")
+    st.warning("⚠️ SLACK_BOT_TOKEN não definida – nomes de usuários podem aparecer como “–”.")
 
 st.set_page_config(page_title="Painel JFL", layout="wide")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-# ─────────────────────── Helpers ────────────────────────
+# ═══════════════ Estilo básico ═════════════════════════════
+st.markdown(
+    """
+    <style>
+      .main  { background:#F5F5F5 }
+      .title { font-size:32px;font-weight:bold;color:#003366 }
+      .sub   { font-size:16px;color:#666 }
+      .card  { background:#fff;padding:20px;border-radius:12px;
+               box-shadow:0 2px 6px rgba(0,0,0,.1);text-align:center }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", True)
+st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</div>", True)
+st.markdown("---")
+
+# ═══════════════ Helpers ══════════════════════════════════
 _reab = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
 
-def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str,
-                      data_abertura: pd.Timestamp) -> list[dict]:
-    """Transforma texto de reaberturas em registros estruturados."""
+def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str, data_abertura: pd.Timestamp):
+    """Extrai texto de reaberturas → lista de dicionários"""
     if not txt:
         return []
     regs: list[dict] = []
@@ -64,14 +84,12 @@ def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str,
             )
     return regs
 
-def fetch_thread(channel_id: str, thread_ts: str):
-    """Busca mensagens de uma thread Slack."""
+def fetch_thread(channel_id: str | None, thread_ts: str | None):
+    """Busca mensagens da thread no Slack."""
     if not (channel_id and thread_ts and SLACK_BOT_TOKEN):
         return []
     try:
-        # Slack exige string no formato 1234567890.123456
-        ts_str = f"{float(thread_ts):.6f}"
-        resp = slack_client.conversations_replies(channel=str(channel_id), ts=ts_str, limit=200)
+        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
         return resp["messages"][::-1]
     except SlackApiError as e:
         st.error(f"Erro Slack: {e.response['error']}")
@@ -80,9 +98,9 @@ def fetch_thread(channel_id: str, thread_ts: str):
 def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# ─────────────────────── Carregamento ────────────────────
+# ═══════════════ Carregamento base ════════════════════════
 @st.cache_data(show_spinner=False)
-def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
+def carregar_dados():
     url = DATA_PUBLIC_URL.replace("postgres://", "postgresql+psycopg2://")
     if "sslmode" not in url:
         url += "?sslmode=require"
@@ -98,32 +116,29 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    # preenche colunas obrigatórias faltantes
+    # Preenche campos mínimos
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
-        "data_abertura", "data_fechamento",
-        "log_edicoes", "historico_reaberturas",
-        "data_ultima_edicao", "ultimo_editor",
-        "canal_id", "thread_ts",
+        "data_abertura", "data_fechamento", "log_edicoes",
+        "historico_reaberturas", "data_ultima_edicao", "ultimo_editor",
     ]
     for col in obrig:
         if col not in df.columns:
             df[col] = None
 
-    # nomes legíveis
+    # Nomes legíveis
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
     df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
 
-    # datas
+    # Datas
     df["data_abertura"]   = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    # df_alt = edições + reaberturas
+    # df_alt (edições + reaberturas)
     regs: list[dict] = []
     for _, r in df.iterrows():
-        # edições
         if r["log_edicoes"]:
             try:
                 for campo, mud in json.loads(r["log_edicoes"]).items():
@@ -141,7 +156,6 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
                     )
             except Exception:
                 pass
-        # reaberturas
         regs += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
@@ -152,28 +166,30 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     df_alt = pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
     return df, df_alt
 
-# ─────────────────────── Main ────────────────────────────
+# ═══════════════ Main =================================================
 df, df_alt = carregar_dados()
 if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
-# filtros
-today  = date.today()
+# Filtros ----------------------------------------------------------------
+today = date.today()
 min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
+
 mask = df["data_abertura"].dt.date.between(ini, fim)
-df   = df[mask]
-df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)] if not df_alt.empty else df_alt
+df = df[mask]
+if not df_alt.empty:
+    df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)]
 
 resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", resp_opts, [])
+sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", resp_opts)
 if sel_resp:
     df = df[df["responsavel_nome"].isin(sel_resp)]
     if not df_alt.empty:
         df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
 
-# ─────────────────────── Métricas ────────────────────────
+# Métricas ----------------------------------------------------------------
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
 c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
@@ -182,61 +198,74 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 st.markdown("---")
 
-# ─────────────────────── Grade + Detalhes ───────────────
+# ═══════════════ Grade + Detalhes ═════════════════════════
 st.subheader("📄 Chamados")
 
-# coluna extra “Ver Thread” → botão simbólico
-df_grid = df.copy()
-df_grid.insert(0, "Ver Thread", "💬")                       # primeira coluna
+# Coluna extra “Ver Thread”
+df["ver_thread"] = "🔗"
 
-# grade ordenada
-grid_cols = ["Ver Thread", "id", "tipo_ticket", "status",
-             "solicitante_nome", "responsavel_nome",
-             "data_abertura", "canal_id", "thread_ts"]
+grid_cols = [
+    "ver_thread",          # nova coluna (índice 0)
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura", "canal_id", "thread_ts",
+]
 
-df_grid = df_grid.reindex(columns=grid_cols, fill_value=None)
+# reindex cria colunas faltantes com None
+df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
 
+# --------­ Config AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
-gb.configure_column("Ver Thread", header_name="Ver Thread", width=90, pinned="left")
+gb.configure_column("ver_thread", header_name="Ver Thread", width=100, pinned="left")
 gb.configure_selection("single")
 
-sel = AgGrid(
+grid_response = AgGrid(
     df_grid,
     gridOptions=gb.build(),
     update_mode=GridUpdateMode.SELECTION_CHANGED,
     height=320,
     theme="streamlit",
     fit_columns_on_grid_load=True,
-).get("selected_rows", [])
+)
+sel = grid_response.get("selected_rows", [])
 
-# detalhes
+# Botão global “Ver Thread” (fica antes da grade na UI)
+st.markdown("##### ")
+btn_thread = st.button("💬 Ver Thread (registro selecionado)")
+
+# --------­ Detalhes + thread
 if sel and isinstance(sel[0], dict):
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
+
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
     try:
-        abertura_fmt = pd.to_datetime(safe_get(r,"data_abertura")).strftime("%d/%m/%Y %H:%M")
+        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
         abertura_fmt = "-"
 
-    st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
+    st.write(
+        f"""**Tipo:** {safe_get(r,'tipo_ticket')}
 **Status:** {safe_get(r,'status')}
 **Solicitante:** {safe_get(r,'solicitante_nome')}
 **Responsável:** {safe_get(r,'responsavel_nome')}
-**Abertura:** {abertura_fmt}""")
+**Abertura:** {abertura_fmt}"""
+    )
 
-    if st.button("Ver Thread", key=f"thr_{safe_get(r,'id')}"):
-        msgs = fetch_thread(safe_get(r,"canal_id"), safe_get(r,"thread_ts"))
+    # Mostra thread se botão pressionado
+    if btn_thread:
+        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
+            st.markdown("---")
             for m in msgs:
                 ts   = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user",""))
-                txt  = m.get("text","")
-                pin  = "📌 " if m["ts"] == safe_get(r,"thread_ts") else ""
+                user = get_nome_real(m.get("user", ""))
+                txt  = m.get("text", "")
+                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
@@ -247,11 +276,13 @@ if sel and isinstance(sel[0], dict):
         else:
             st.info("Nenhuma mensagem ou canal inválido.")
 else:
-    st.info("Selecione um chamado para ver os detalhes e a thread.")
+    if btn_thread:
+        st.warning("Selecione um chamado antes de clicar em 'Ver Thread'.")
 
-# ─────────────────────── Gráficos ───────────────────────
+# ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
+
 with g1:
     fig, ax = plt.subplots(figsize=(4, 2))
     df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4", width=0.5)
@@ -264,8 +295,10 @@ with g1:
 
 with g2:
     fech = df[df["data_fechamento"].notna()]
-    st.metric("🗓️ Tempo médio de fechamento",
-              f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
+    st.metric(
+        "🗓️ Tempo médio de fechamento",
+        f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-"
+    )
     if not fech.empty:
         fig2, ax2 = plt.subplots(figsize=(4, 2))
         fech["dias_para_fechamento"].hist(ax=ax2, bins=6, color="#34A853")
@@ -276,17 +309,25 @@ with g2:
         for s in ax2.spines.values(): s.set_visible(False)
         st.pyplot(fig2)
 
-# ─────────────────────── Alterações + Export ─────────────
+# ═══════════════ Alterações + Exportações ═════════════════
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
     st.info("Não há alterações para o filtro atual.")
 else:
     vis = df_alt.rename(columns={"id": "OS", "quando": "Data", "quem": "Usuário"})
     a, b = st.columns([2, 1])
+
     with a:
         st.dataframe(vis, use_container_width=True)
+
     with b:
-        top = vis["Usuário"].value_counts().head(10).rename_axis("Usuário").reset_index(name="Qtd")
+        top = (
+            vis["Usuário"]
+            .value_counts()
+            .head(10)
+            .rename_axis("Usuário")
+            .reset_index(name="Qtd")
+        )
         fig3, ax3 = plt.subplots(figsize=(4, 2))
         top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
         ax3.invert_yaxis()
@@ -296,20 +337,28 @@ else:
         for s in ax3.spines.values(): s.set_visible(False)
         st.pyplot(fig3)
 
-# exportações
 st.subheader("📦 Exportar")
 csv_main = df.to_csv(index=False).encode()
 csv_alt  = df_alt.to_csv(index=False).encode()
+
 c_csv, c_xlsx, a_csv, a_xlsx = st.columns(4)
 
 c_csv.download_button("⬇️ Chamados CSV", csv_main, "chamados.csv", "text/csv")
 
 buf = io.BytesIO(); df.to_excel(buf, index=False, engine="xlsxwriter")
-c_xlsx.download_button("📊 Chamados XLSX", buf.getvalue(), "chamados.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+c_xlsx.download_button(
+    "📊 Chamados XLSX",
+    buf.getvalue(),
+    "chamados.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
 
 a_csv.download_button("⬇️ Alterações CSV", csv_alt, "alteracoes.csv", "text/csv")
 
 buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
-a_xlsx.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+a_xlsx.download_button(
+    "📊 Alterações XLSX",
+    buf2.getvalue(),
+    "alteracoes.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
