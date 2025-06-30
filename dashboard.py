@@ -14,17 +14,20 @@ from __future__ import annotations
 import os, io, json, re
 from datetime import date
 
-import pandas as pd, sqlalchemy
-st.write(f"Pandas {pd.__version__} | SQLAlchemy {sqlalchemy.__version__}")
-import streamlit as st
+import pandas as pd
+import sqlalchemy
+import streamlit as st  
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text            # ← text é ESSENCIAL!
+from sqlalchemy import create_engine, text
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-from utils.slack import get_nome_real                 # usa SLACK_BOT_TOKEN
+from utils.slack import get_nome_real  # usa SLACK_BOT_TOKEN
+
+# 🔎 Versões das libs (debug rápido se precisar)
+st.write(f"Pandas {pd.__version__} | SQLAlchemy {sqlalchemy.__version__}")
 
 # ─────────────────────── Variáveis de ambiente ──────────────────────
 load_dotenv()                                         # carrega .env / secrets.toml
