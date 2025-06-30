@@ -239,15 +239,23 @@ sel = AgGrid(
 )["selected_rows"]
 
 # ─────────────── Detalhes + Thread Slack ───────────────
+
+def safe_get(row, col, default="-"):
+    """Acessa valor de coluna com segurança, seja dict ou Series."""
+    try:
+        return row[col] if col in row else default
+    except Exception:
+        return default
+
 if sel:
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {r.get('id','-')}")
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
 
-    tipo = r.get('tipo_ticket', '-')
-    status = r.get('status', '-')
-    solicitante = r.get('solicitante_nome', '-')
-    responsavel = r.get('responsavel_nome', '-')
-    abertura = r.get('data_abertura', '')
+    tipo        = safe_get(r, "tipo_ticket")
+    status      = safe_get(r, "status")
+    solicitante = safe_get(r, "solicitante_nome")
+    responsavel = safe_get(r, "responsavel_nome")
+    abertura    = safe_get(r, "data_abertura", "")
 
     try:
         abertura_fmt = pd.to_datetime(abertura).strftime('%d/%m/%Y %H:%M') if abertura else "-"
@@ -261,10 +269,8 @@ if sel:
 **Abertura:** {abertura_fmt}"""
     )
 
-    if st.button("💬 Ver thread Slack", key=f"btn_thread_{r.get('id')}"):
-        canal_id = r.get("canal_id")
-        thread_ts = r.get("thread_ts")
-        msgs = fetch_thread(canal_id, thread_ts)
+    if st.button("💬 Ver thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
+        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             st.markdown("---")
@@ -272,7 +278,7 @@ if sel:
                 ts   = pd.to_datetime(float(m["ts"]), unit="s")
                 user = get_nome_real(m.get("user", ""))
                 txt  = m.get("text", "")
-                pin  = "📌 " if m["ts"] == thread_ts else ""
+                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
