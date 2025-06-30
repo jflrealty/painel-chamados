@@ -102,27 +102,24 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
 # ─────────────────────────── Data Loading ───────────────────────────
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
-
     url = os.getenv("DATA_PUBLIC_URL", "")
     if not url:
         st.error("❌ DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # adapta URI antiga + força SSL
+    # adapta URI + SSL
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
-        # Engine com pool & keep-alive
+        # 🔑 O segredo: usar apenas create_engine() e passar para read_sql
         engine = create_engine(url, pool_pre_ping=True)
+        query = "SELECT * FROM ordens_servico"
 
-        # ✅ basta uma string
-        sql = "SELECT * FROM ordens_servico"
-
-        # 👉 pandas lida com o engine; ele mesmo abre/fecha a conexão
-        df = pd.read_sql(sql, engine)
+        # 🧠 pandas fala direto com o engine — não precisa open/close
+        df = pd.read_sql(query, con=engine)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
