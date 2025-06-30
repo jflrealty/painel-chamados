@@ -149,6 +149,29 @@ if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
+# 🔍 Debug de colunas reais
+st.subheader("🔍 Debug: colunas carregadas do banco")
+st.write(df.columns.tolist())
+
+# 🧼 Sanitize total nas colunas
+df.columns = (
+    pd.Series(df.columns)
+    .astype(str)
+    .str.strip()
+    .str.replace(r"[\n\r\t]", "", regex=True)
+    .str.replace("\ufeff", "")  # remove BOM
+    .str.lower()
+)
+
+# 🔒 Verifica se colunas mínimas existem antes de tudo
+colunas_necessarias = ["id", "tipo_ticket", "status", "solicitante", "responsavel", "data_abertura"]
+faltando = [c for c in colunas_necessarias if c not in df.columns]
+if faltando:
+    st.error(f"❌ Colunas ausentes na base de dados: {faltando}")
+    st.stop()
+
+# 🗓️ Filtros principais
+df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
 today = date.today()
 min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
@@ -157,6 +180,7 @@ df = df[mask]
 if not df_alt.empty:
     df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)]
 
+# 🧑‍💼 Filtro por responsável
 resp_opts = sorted(df["responsavel_nome"].dropna().unique())
 sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", options=resp_opts, default=[], placeholder="Selecione...")
 if sel_resp:
