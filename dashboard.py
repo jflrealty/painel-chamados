@@ -1,5 +1,5 @@
 # -------------------------------------------------------------
-# dashboard.py  •  Painel JFL Comercial
+# dashboard.py  •  Painel JFL Comercial – revisão 2025-06-30
 # -------------------------------------------------------------
 """
 Streamlit dashboard para acompanhar os chamados comerciais JFL.
@@ -11,6 +11,7 @@ Streamlit dashboard para acompanhar os chamados comerciais JFL.
 from __future__ import annotations
 import os, io, json, re
 from datetime import date
+
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -19,83 +20,73 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
-from utils.slack import get_nome_real  # helper já existente
+from utils.slack import get_nome_real                                    # fun helpers
 
-# ────────────────────── Ambiente ──────────────────────
+# ─────────────────────── Ambiente ───────────────────────
 load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 DATA_PUBLIC_URL = os.getenv("DATA_PUBLIC_URL", "")
+
 if not DATA_PUBLIC_URL:
     st.error("❌ DATA_PUBLIC_URL não definida.")
     st.stop()
 if not SLACK_BOT_TOKEN:
-    st.warning("⚠️ SLACK_BOT_TOKEN não definida – nomes de usuários podem aparecer como “–”.")
+    st.warning("⚠️ SLACK_BOT_TOKEN não definida – nomes de usuários poderão aparecer como “–”.")
+
 st.set_page_config(page_title="Painel JFL", layout="wide")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-st.markdown("""
-<style>
-.main  { background:#F5F5F5 }
-.title { font-size:32px;font-weight:bold;color:#003366 }
-.sub   { font-size:16px;color:#666 }
-.card  { background:#fff;padding:20px;border-radius:12px;
-         box-shadow:0 2px 6px rgba(0,0,0,.1);text-align:center }
-</style>
-""", unsafe_allow_html=True)
-st.markdown("<div class='title'>🏢 JFL | Painel Gerencial de Chamados</div>", True)
-st.markdown("<div class='sub'>Monitoramento em tempo real • Base comercial</div>", True)
-st.markdown("---")
-
-# ───────────── Helpers ─────────────
+# ─────────────────────── Helpers ────────────────────────
 _reab = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
-def parse_reaberturas(txt, os_id, resp_nome, data_abertura):
+
+def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str,
+                      data_abertura: pd.Timestamp) -> list[dict]:
+    """Transforma texto de reaberturas em registros estruturados."""
     if not txt:
         return []
-    regs = []
+    regs: list[dict] = []
     for linha in filter(None, map(str.strip, txt.splitlines())):
         m = _reab.match(linha)
         if m:
             data_str, quem, desc = m.groups()
-            regs.append(dict(
-                id=os_id,
-                quando=pd.to_datetime(data_str, errors="coerce"),
-                quem=quem,
-                descricao=desc,
-                campo="reabertura", de="-", para="-",
-                responsavel_nome=resp_nome,
-                data_abertura=data_abertura,
-            ))
+            regs.append(
+                dict(
+                    id=os_id,
+                    quando=pd.to_datetime(data_str, errors="coerce"),
+                    quem=quem,
+                    descricao=desc,
+                    campo="reabertura",
+                    de="-",
+                    para="-",
+                    responsavel_nome=resp_nome,
+                    data_abertura=data_abertura,
+                )
+            )
     return regs
 
-def fetch_thread(channel_id, thread_ts):
+def fetch_thread(channel_id: str, thread_ts: str):
+    """Busca mensagens de uma thread Slack."""
     if not (channel_id and thread_ts and SLACK_BOT_TOKEN):
-        st.error("❌ Dados incompletos para buscar a thread (canal ou thread_ts ausente).")
         return []
     try:
-        # Slack exige que o ts seja string no formato "1729473929.218833"
+        # Slack exige string no formato 1234567890.123456
         ts_str = f"{float(thread_ts):.6f}"
-        return slack_client.conversations_replies(channel=str(channel_id), ts=ts_str, limit=200)["messages"][::-1]
+        resp = slack_client.conversations_replies(channel=str(channel_id), ts=ts_str, limit=200)
+        return resp["messages"][::-1]
     except SlackApiError as e:
-        st.error(f"Erro Slack: `{e.response['error']}`")
-        return []
-    except Exception as e:
-        st.error(f"Erro inesperado: {e}")
+        st.error(f"Erro Slack: {e.response['error']}")
         return []
 
 def safe_get(row: dict, col: str, default="-"):
-    try:
-        if isinstance(row, dict):
-            return row.get(col, default)
-        return default
-    except Exception:
-        return default
+    return row.get(col, default) if isinstance(row, dict) else default
 
-# ───────────── Carregamento ─────────────
+# ─────────────────────── Carregamento ────────────────────
 @st.cache_data(show_spinner=False)
-def carregar_dados():
+def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = DATA_PUBLIC_URL.replace("postgres://", "postgresql+psycopg2://")
     if "sslmode" not in url:
         url += "?sslmode=require"
+
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
         with engine.connect() as conn:
@@ -107,37 +98,50 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    obrig = ["responsavel", "solicitante", "capturado_por", "status",
-             "data_abertura", "data_fechamento", "log_edicoes",
-             "historico_reaberturas", "data_ultima_edicao", "ultimo_editor"]
+    # preenche colunas obrigatórias faltantes
+    obrig = [
+        "responsavel", "solicitante", "capturado_por", "status",
+        "data_abertura", "data_fechamento",
+        "log_edicoes", "historico_reaberturas",
+        "data_ultima_edicao", "ultimo_editor",
+        "canal_id", "thread_ts",
+    ]
     for col in obrig:
         if col not in df.columns:
             df[col] = None
 
+    # nomes legíveis
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"] = df["capturado_por"].apply(get_nome_real)
-    df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
+    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
+
+    # datas
+    df["data_abertura"]   = pd.to_datetime(df["data_abertura"], errors="coerce")
     df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
-    regs = []
+    # df_alt = edições + reaberturas
+    regs: list[dict] = []
     for _, r in df.iterrows():
+        # edições
         if r["log_edicoes"]:
             try:
                 for campo, mud in json.loads(r["log_edicoes"]).items():
-                    regs.append(dict(
-                        id=r["id"],
-                        quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
-                        quem=r.get("ultimo_editor") or "-",
-                        descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
-                        campo=campo,
-                        de=mud.get("de"), para=mud.get("para"),
-                        responsavel_nome=r["responsavel_nome"],
-                        data_abertura=r["data_abertura"],
-                    ))
+                    regs.append(
+                        dict(
+                            id=r["id"],
+                            quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
+                            quem=r.get("ultimo_editor") or "-",
+                            descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
+                            campo=campo,
+                            de=mud.get("de"), para=mud.get("para"),
+                            responsavel_nome=r["responsavel_nome"],
+                            data_abertura=r["data_abertura"],
+                        )
+                    )
             except Exception:
                 pass
+        # reaberturas
         regs += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
@@ -148,52 +152,28 @@ def carregar_dados():
     df_alt = pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
     return df, df_alt
 
-# ───────────── Main ─────────────
+# ─────────────────────── Main ────────────────────────────
 df, df_alt = carregar_dados()
 if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
-# 🔍 Debug de colunas reais
-st.subheader("🔍 Debug: colunas carregadas do banco")
-st.write(df.columns.tolist())
-
-# 🧼 Sanitize total nas colunas
-df.columns = (
-    pd.Series(df.columns)
-    .astype(str)
-    .str.strip()
-    .str.replace(r"[\n\r\t]", "", regex=True)
-    .str.replace("\ufeff", "")  # remove BOM
-    .str.lower()
-)
-
-# 🔒 Verifica se colunas mínimas existem antes de tudo
-colunas_necessarias = ["id", "tipo_ticket", "status", "solicitante", "responsavel", "data_abertura"]
-faltando = [c for c in colunas_necessarias if c not in df.columns]
-if faltando:
-    st.error(f"❌ Colunas ausentes na base de dados: {faltando}")
-    st.stop()
-
-# 🗓️ Filtros principais
-df["data_abertura"] = pd.to_datetime(df["data_abertura"], errors="coerce")
-today = date.today()
+# filtros
+today  = date.today()
 min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
 mask = df["data_abertura"].dt.date.between(ini, fim)
-df = df[mask]
-if not df_alt.empty:
-    df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)]
+df   = df[mask]
+df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)] if not df_alt.empty else df_alt
 
-# 🧑‍💼 Filtro por responsável
 resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", options=resp_opts, default=[], placeholder="Selecione...")
+sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", resp_opts, [])
 if sel_resp:
     df = df[df["responsavel_nome"].isin(sel_resp)]
     if not df_alt.empty:
         df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
 
-# ───────────── Métricas ─────────────
+# ─────────────────────── Métricas ────────────────────────
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
 c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
@@ -202,58 +182,43 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 st.markdown("---")
 
-# ───────────── Grade + Detalhes ─────────────
-st.subheader("📄 Chamados (clique em uma linha)")
+# ─────────────────────── Grade + Detalhes ───────────────
+st.subheader("📄 Chamados")
 
-# 1) higieniza nomes de coluna **UMA vez** (sem .lower() pra não mudar snake_case)
-df.columns = (
-    pd.Series(df.columns, dtype=str)
-      .str.strip()
-      .str.replace(r"[\n\r\t]", "", regex=True)
-      .str.replace("\ufeff", "")
-)
+# coluna extra “Ver Thread” → botão simbólico
+df_grid = df.copy()
+df_grid.insert(0, "Ver Thread", "💬")                       # primeira coluna
 
-# 2) lista fixa que você quer na grade
-grid_cols = [
-    "id", "tipo_ticket", "status",
-    "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts",
-]
+# grade ordenada
+grid_cols = ["Ver Thread", "id", "tipo_ticket", "status",
+             "solicitante_nome", "responsavel_nome",
+             "data_abertura", "canal_id", "thread_ts"]
 
-# 3) cria de forma segura: reindex adiciona o que falta com None ✅
-df_grid = (
-    df.reindex(columns=grid_cols, fill_value=None)  # nunca gera KeyError
-      .copy()
-)
+df_grid = df_grid.reindex(columns=grid_cols, fill_value=None)
 
-# 4) AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
+gb.configure_column("Ver Thread", header_name="Ver Thread", width=90, pinned="left")
 gb.configure_selection("single")
 
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
     update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=300,
+    height=320,
     theme="streamlit",
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# 🧾 Safe getter
-def safe_get(row: dict, col: str, default="-"):
-    return row.get(col, default) if isinstance(row, dict) else default
-
-# ℹ️ Detalhes
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
+# detalhes
+if sel and isinstance(sel[0], dict):
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
     try:
-        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
+        abertura_fmt = pd.to_datetime(safe_get(r,"data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
         abertura_fmt = "-"
 
@@ -263,40 +228,15 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
 **Responsável:** {safe_get(r,'responsavel_nome')}
 **Abertura:** {abertura_fmt}""")
 
-    if st.button("💬 Ver thread Slack", key=f"thread_{safe_get(r,'id')}"):
-    canal_id = safe_get(r, "canal_id")
-    thread_ts = safe_get(r, "thread_ts")
-
-    st.markdown(f"🔍 `canal_id`: `{canal_id}`")
-    st.markdown(f"🔍 `thread_ts`: `{thread_ts}`")
-
-    if not canal_id or not thread_ts or pd.isna(canal_id) or pd.isna(thread_ts):
-        st.warning("⚠️ Esse chamado não possui canal_id ou thread_ts válidos.")
-    else:
-        msgs = fetch_thread(str(canal_id), str(thread_ts))
+    if st.button("Ver Thread", key=f"thr_{safe_get(r,'id')}"):
+        msgs = fetch_thread(safe_get(r,"canal_id"), safe_get(r,"thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
                 ts   = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user", ""))
-                txt  = m.get("text", "")
-                pin  = "📌 " if m["ts"] == thread_ts else ""
-                bg   = "#E3F2FD" if pin else "#fff"
-                st.markdown(
-                    f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                    f"<strong>{pin}{user}</strong> "
-                    f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info("Nenhuma mensagem encontrada ou canal/thread inválido.")
-        if msgs:
-            st.success(f"{len(msgs)} mensagens")
-            for m in msgs:
-                ts   = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user", ""))
-                txt  = m.get("text", "")
-                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
+                user = get_nome_real(m.get("user",""))
+                txt  = m.get("text","")
+                pin  = "📌 " if m["ts"] == safe_get(r,"thread_ts") else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
@@ -307,9 +247,9 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
         else:
             st.info("Nenhuma mensagem ou canal inválido.")
 else:
-    st.info("Clique em um chamado para ver os detalhes.")
+    st.info("Selecione um chamado para ver os detalhes e a thread.")
 
-# ───────────── Gráficos ─────────────
+# ─────────────────────── Gráficos ───────────────────────
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
 with g1:
@@ -336,7 +276,7 @@ with g2:
         for s in ax2.spines.values(): s.set_visible(False)
         st.pyplot(fig2)
 
-# ───────────── Alterações + Export ─────────────
+# ─────────────────────── Alterações + Export ─────────────
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
     st.info("Não há alterações para o filtro atual.")
@@ -356,15 +296,20 @@ else:
         for s in ax3.spines.values(): s.set_visible(False)
         st.pyplot(fig3)
 
+# exportações
 st.subheader("📦 Exportar")
 csv_main = df.to_csv(index=False).encode()
 csv_alt  = df_alt.to_csv(index=False).encode()
 c_csv, c_xlsx, a_csv, a_xlsx = st.columns(4)
+
 c_csv.download_button("⬇️ Chamados CSV", csv_main, "chamados.csv", "text/csv")
+
 buf = io.BytesIO(); df.to_excel(buf, index=False, engine="xlsxwriter")
 c_xlsx.download_button("📊 Chamados XLSX", buf.getvalue(), "chamados.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 a_csv.download_button("⬇️ Alterações CSV", csv_alt, "alteracoes.csv", "text/csv")
+
 buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
 a_xlsx.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
