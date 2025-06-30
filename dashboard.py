@@ -105,6 +105,7 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
 
 # ─────────────────────────── Data Loading ───────────────────────────
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -121,9 +122,9 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
 
-        # Usa connection + execute + fetchall — compatível com pandas 2.x
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT * FROM ordens_servico"))
+        # SQLAlchemy 2.x: usa Session + select
+        with Session(engine) as session:
+            result = session.execute(text("SELECT * FROM ordens_servico"))
             df = pd.DataFrame(result.fetchall(), columns=result.keys())
 
     except Exception as e:
