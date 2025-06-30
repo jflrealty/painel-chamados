@@ -182,10 +182,13 @@ grid_cols = [
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# reindex garante todas as colunas e mantém a ordem desejada
-df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
+# 1️⃣ interseção — pega apenas colunas já existentes
+df_grid = df.loc[:, df.columns.intersection(grid_cols)].copy()
 
-# ---------- AgGrid ----------
+# 2️⃣ reindex — garante a presença de TODAS as colunas na ordem desejada
+df_grid = df_grid.reindex(columns=grid_cols, fill_value=None)
+
+# 3️⃣ AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
