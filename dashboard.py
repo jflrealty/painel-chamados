@@ -14,7 +14,8 @@ from __future__ import annotations
 import os, io, json, re
 from datetime import date
 
-import pandas as pd
+import pandas as pd, sqlalchemy
+st.write(f"Pandas {pd.__version__} | SQLAlchemy {sqlalchemy.__version__}")
 import streamlit as st
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
@@ -100,8 +101,6 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
-from sqlalchemy.orm import sessionmaker
-
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL", "")
@@ -115,12 +114,8 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         url += "?sslmode=require"
 
     try:
-        # Cria engine e session
         engine = create_engine(url, pool_pre_ping=True, future=True)
-        Session = sessionmaker(bind=engine)
-        with Session() as session:
-            with session.connection() as conn:
-                df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
+        df = pd.read_sql("SELECT * FROM ordens_servico", con=engine)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
