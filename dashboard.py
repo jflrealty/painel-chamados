@@ -219,7 +219,8 @@ st.markdown("---")
 st.subheader("📄 Chamados (clique em uma linha)")
 
 for c in ("canal_id", "thread_ts"):
-    df.setdefault(c, None)
+    if c not in df.columns:
+        df[c] = None
 
 grid_cols = [
     "id", "tipo_ticket", "status",
