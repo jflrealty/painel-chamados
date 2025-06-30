@@ -200,25 +200,35 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Garante que colunas necessárias estão disponíveis ANTES dos filtros
-df["responsavel_nome"] = df.get("responsavel", "").apply(get_nome_real)
-df["solicitante_nome"] = df.get("solicitante", "").apply(get_nome_real)
-df["capturado_nome"] = df.get("capturado_por", "").apply(get_nome_real)
+# 🛡️ Sanitize colunas
+df.columns = (
+    pd.Series(df.columns)
+    .astype(str)
+    .str.strip()
+    .str.replace(r"[\n\r\t]", "", regex=True)
+    .str.replace("\ufeff", "")  # remove BOM
+)
 
-# Lista de colunas da grade
+# 🧱 Define colunas esperadas
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts",
+    "data_abertura", "canal_id", "thread_ts"
 ]
 
-# Verifica e adiciona colunas ausentes
+# 🧩 Cria colunas ausentes
 for col in grid_cols:
     if col not in df.columns:
         df[col] = None
 
-# Reindexa com segurança e prepara grade
-df_grid = df[grid_cols].copy()
+# 🧪 Verifica antes de montar grid
+try:
+    df_grid = df[grid_cols].copy()
+except KeyError as e:
+    st.error(f"❌ Colunas faltando: {e}")
+    st.stop()
+
+# 🧰 Configura grid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -226,7 +236,7 @@ gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
-# Mostra grade
+# ▶️ Renderiza
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
@@ -236,11 +246,11 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# Safe getter
+# 🧾 Safe getter
 def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# Detalhes do chamado
+# ℹ️ Detalhes
 if sel and isinstance(sel[0], dict):
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
