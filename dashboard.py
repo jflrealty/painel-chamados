@@ -186,7 +186,7 @@ gb.configure_selection("single")
 sel = AgGrid(df, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED,
              height=300, theme="streamlit", fit_columns_on_grid_load=True)["selected_rows"]
 
-if sel and len(sel) > 0:
+if isinstance(sel, list) and len(sel) > 0:
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
     try:
