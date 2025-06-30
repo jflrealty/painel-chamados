@@ -176,26 +176,33 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# 1) Remove duplicadas e converte col-names p/ string
-df = df.loc[:, ~df.columns.duplicated()].copy()
-df.columns = df.columns.map(str)
+# Sanitiza colunas (remove espaços invisíveis e força string)
+df.columns = df.columns.map(lambda x: str(x).strip())
 
-# 2) Colunas desejadas para a grade
+# Colunas desejadas
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# 3) reindex → se faltar alguma, já entra com None (evita KeyError)
-df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
+# Cria colunas faltantes com None
+for col in grid_cols:
+    if col not in df.columns:
+        df[col] = None
 
-# 4) AgGrid
+# Usa apenas colunas disponíveis (mesmo se ordem bagunçar)
+safe_cols = [c for c in grid_cols if c in df.columns]
+df_grid = df[safe_cols].copy()
+
+# AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_column("canal_id", hide=True)
-gb.configure_column("thread_ts", hide=True)
+if "canal_id" in df_grid.columns:
+    gb.configure_column("canal_id", hide=True)
+if "thread_ts" in df_grid.columns:
+    gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
 sel = AgGrid(
