@@ -176,29 +176,32 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Sanitiza nomes de colunas completamente
-df.columns = df.columns.map(lambda c: str(c).strip().replace('\n', '').replace('\r', ''))
+# 1. Corrige e sanitiza nomes de colunas
+df.columns = (
+    pd.Series(df.columns)
+    .astype(str)
+    .str.strip()
+    .str.replace(r"[\n\r\t]", "", regex=True)
+    .str.replace("\ufeff", "")  # remove BOM
+)
 
-# Exibe colunas reais para debug
-st.write("🧪 Colunas disponíveis:", df.columns.tolist())
-
-# Lista de colunas desejadas
+# 2. Lista de colunas que queremos usar no grid
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# Preenche as que faltam
+# 3. Garante que todas existam (preenche faltantes com None)
 for col in grid_cols:
     if col not in df.columns:
         st.warning(f"⚠️ Coluna ausente: '{col}' — preenchida com None.")
         df[col] = None
 
-# Cria df seguro
-df_grid = df[grid_cols].copy()
+# 4. Reindexa com segurança (garante a ordem correta sem KeyError)
+df_grid = df.reindex(columns=grid_cols).copy()
 
-# Configura AgGrid
+# 5. Configura grade
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -206,6 +209,7 @@ gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
+# 6. Exibe grid
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
