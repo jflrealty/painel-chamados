@@ -175,18 +175,28 @@ st.markdown("---")
 
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
-for c in ("canal_id", "thread_ts"):
+
+# Garante que colunas críticas existam
+for c in ("canal_id", "thread_ts", "solicitante_nome", "responsavel_nome"):
     if c not in df.columns:
         df[c] = None
-grid_cols = ["id", "tipo_ticket", "status", "solicitante_nome", "responsavel_nome", "data_abertura", "canal_id", "thread_ts"]
-gb = GridOptionsBuilder.from_dataframe(df[grid_cols])
+
+grid_cols = [
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura", "canal_id", "thread_ts",
+]
+df_grid = df[[col for col in grid_cols if col in df.columns]].copy()
+
+gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
+
 sel = AgGrid(
-    df,
+    df_grid,
     gridOptions=gb.build(),
     update_mode=GridUpdateMode.SELECTION_CHANGED,
     height=300,
@@ -194,15 +204,21 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
+def safe_get(row, col, default="-"):
+    try:
+        return row[col] if col in row else default
+    except Exception:
+        return default
+
 if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-else:
-    st.info("Clique em um chamado para ver os detalhes.")
+
     try:
-        abertura_fmt = pd.to_datetime(r["data_abertura"]).strftime('%d/%m/%Y %H:%M')
+        abertura_fmt = pd.to_datetime(r.get("data_abertura", "")).strftime('%d/%m/%Y %H:%M')
     except Exception:
         abertura_fmt = "-"
+
     st.write(f"""**Tipo:** {safe_get(r, 'tipo_ticket')}  •  **Status:** {safe_get(r, 'status')}
 **Solicitante:** {safe_get(r, 'solicitante_nome')}
 **Responsável:** {safe_get(r, 'responsavel_nome')}
@@ -224,6 +240,10 @@ else:
                     f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
                     unsafe_allow_html=True,
                 )
+        else:
+            st.info("Nenhuma mensagem ou canal inválido.")
+else:
+    st.info("Clique em um chamado para ver os detalhes.")
 
 # ───────────── Gráficos ─────────────
 st.subheader("📊 Distribuição e Fechamento")
