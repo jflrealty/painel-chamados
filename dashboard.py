@@ -255,10 +255,14 @@ if sel:
     status      = safe_get(r, "status")
     solicitante = safe_get(r, "solicitante_nome")
     responsavel = safe_get(r, "responsavel_nome")
-    abertura    = safe_get(r, "data_abertura", "")
+    abertura    = safe_get(r, "data_abertura")
 
+    # ✅ Safe date formatting
     try:
-        abertura_fmt = pd.to_datetime(abertura).strftime('%d/%m/%Y %H:%M') if abertura else "-"
+        if pd.notnull(abertura):
+            abertura_fmt = pd.to_datetime(abertura).strftime('%d/%m/%Y %H:%M')
+        else:
+            abertura_fmt = "-"
     except Exception:
         abertura_fmt = "-"
 
@@ -269,6 +273,7 @@ if sel:
 **Abertura:** {abertura_fmt}"""
     )
 
+    # Ver thread
     if st.button("💬 Ver thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
         msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
         if msgs:
