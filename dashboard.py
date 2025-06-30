@@ -176,38 +176,50 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-wanted_cols = [
+# Debug: mostra colunas reais do DataFrame
+st.text("📋 Colunas reais do df:\n" + "\n".join(df.columns))
+
+# Lista que desejamos
+grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# 0️⃣ elimina duplicatas de nome, se existirem
+# Converte nomes para string e remove duplicadas
+df.columns = df.columns.map(str)
 df = df.loc[:, ~df.columns.duplicated()].copy()
 
-# 1️⃣ pega só as colunas que já existem
-df_grid = df.loc[:, df.columns.intersection(wanted_cols)].copy()
+# Garante que todas as colunas estejam presentes
+for col in grid_cols:
+    if col not in df.columns:
+        st.warning(f"⚠️ Coluna ausente: {col} — preenchendo com None")
+        df[col] = None
 
-# 2️⃣ cria as que faltam (virão como None) e garante a ordem
-df_grid = df_grid.reindex(columns=wanted_cols, fill_value=None)
+# Novo DataFrame seguro
+try:
+    df_grid = df[grid_cols].copy()
+except KeyError as e:
+    st.error(f"❌ KeyError ao montar df_grid: {e}")
+    st.stop()
 
-# 3️⃣ constrói o AgGrid com segurança
-gb = GridOptionsBuilder.from_dataframe(df_grid, enable_enterprise_modules=False)
+# AgGrid config
+gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
-sel_rows = AgGrid(
+# AgGrid render
+sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
     update_mode=GridUpdateMode.SELECTION_CHANGED,
     height=300,
     theme="streamlit",
     fit_columns_on_grid_load=True,
-)["selected_rows"]
-
+).get("selected_rows", [])
 # -------- helper ----------
 def v(row, col, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
