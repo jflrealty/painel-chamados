@@ -176,29 +176,34 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Converte colunas para string (evita KeyError por dtype estranho)
+# Garante tipos consistentes
 df.columns = df.columns.map(str)
 
-# Colunas esperadas na grade
-grid_cols = [
+# Colunas esperadas (não faz mal se algumas não existirem)
+wanted_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# Garante que todas existam
-for col in grid_cols:
+# Cria as faltantes como None e separa presentes
+for col in wanted_cols:
     if col not in df.columns:
         df[col] = None
+present_cols = [col for col in wanted_cols if col in df.columns]
 
-df_grid = df[grid_cols].copy()
+df_grid = df[present_cols].copy()
 
-# AgGrid configuração
+# Configura AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_column("canal_id", hide=True)
-gb.configure_column("thread_ts", hide=True)
+
+# Esconde canal_id/thread_ts só se existirem
+for hide_col in ("canal_id", "thread_ts"):
+    if hide_col in present_cols:
+        gb.configure_column(hide_col, hide=True)
+
 gb.configure_selection("single")
 
 sel = AgGrid(
@@ -210,38 +215,39 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# Helper seguro
-def safe_get(row, col, default="-"):
-    try:
-        return row[col] if col in row else default
-    except Exception:
-        return default
+# ---------- helper seguro ----------
+def safe_get(row: dict, col: str, default: str = "-"):
+    return row.get(col, default) if isinstance(row, dict) else default
 
-# Exibe detalhes do chamado
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
+# ---------- detalhes ----------
+if sel:
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
 
+    abertura_raw = safe_get(r, "data_abertura", "")
     try:
-        abertura_fmt = pd.to_datetime(r.get("data_abertura", "")).strftime('%d/%m/%Y %H:%M')
+        abertura_fmt = pd.to_datetime(abertura_raw).strftime('%d/%m/%Y %H:%M') if abertura_raw else "-"
     except Exception:
         abertura_fmt = "-"
 
-    st.write(f"""**Tipo:** {safe_get(r, 'tipo_ticket')}  •  **Status:** {safe_get(r, 'status')}
+    st.write(
+        f"""**Tipo:** {safe_get(r, 'tipo_ticket')}
+**Status:** {safe_get(r, 'status')}
 **Solicitante:** {safe_get(r, 'solicitante_nome')}
 **Responsável:** {safe_get(r, 'responsavel_nome')}
-**Abertura:** {abertura_fmt}""")
+**Abertura:** {abertura_fmt}"""
+    )
 
     if st.button("💬 Ver thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
         msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
-                ts = pd.to_datetime(float(m["ts"]), unit="s")
+                ts   = pd.to_datetime(float(m["ts"]), unit="s")
                 user = get_nome_real(m.get("user", ""))
-                txt = m.get("text", "")
-                pin = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
-                bg = "#E3F2FD" if pin else "#fff"
+                txt  = m.get("text", "")
+                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
+                bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
                     f"<strong>{pin}{user}</strong> "
