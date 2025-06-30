@@ -198,75 +198,54 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 st.markdown("---")
 
-# ═══════════════ Grade + Detalhes ═════════════════════════
+# ───────────── Grade + Thread integrada ─────────────
 st.subheader("📄 Chamados")
 
-# Coluna extra “Ver Thread”
-df["ver_thread"] = "🔗"
+# Adiciona coluna com botão "Ver Thread"
+df_grid = df.copy()
+df_grid["Ver Thread"] = df_grid.apply(lambda row: f"🔍 Ver Thread {row['id']}", axis=1)
 
-grid_cols = [
-    "ver_thread",          # nova coluna (índice 0)
-    "id", "tipo_ticket", "status",
-    "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts",
-]
+# Reorganiza colunas
+grid_cols = ["Ver Thread", "id", "tipo_ticket", "status", "solicitante_nome", "responsavel_nome", "data_abertura"]
+df_grid = df_grid.reindex(columns=grid_cols + ["canal_id", "thread_ts"])  # mantém os campos ocultos
 
-# reindex cria colunas faltantes com None
-df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
-
-# --------­ Config AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
-gb.configure_column("ver_thread", header_name="Ver Thread", width=100, pinned="left")
+gb.configure_column("Ver Thread", header_name="💬", width=130)
 gb.configure_selection("single")
 
-grid_response = AgGrid(
+sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
     update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=320,
+    height=300,
     theme="streamlit",
     fit_columns_on_grid_load=True,
-)
-sel = grid_response.get("selected_rows", [])
+).get("selected_rows", [])
 
-# Botão global “Ver Thread” (fica antes da grade na UI)
-st.markdown("##### ")
-btn_thread = st.button("💬 Ver Thread (registro selecionado)")
-
-# --------­ Detalhes + thread
 if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
+    st.markdown(f"### 📝 Detalhes OS {r['id']}")
+    abertura_fmt = pd.to_datetime(r["data_abertura"]).strftime("%d/%m/%Y %H:%M") if r["data_abertura"] else "-"
+    st.write(f"""**Tipo:** {r['tipo_ticket']}
+**Status:** {r['status']}
+**Solicitante:** {r['solicitante_nome']}
+**Responsável:** {r['responsavel_nome']}
+**Abertura:** {abertura_fmt}""")
 
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-    try:
-        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
-    except Exception:
-        abertura_fmt = "-"
-
-    st.write(
-        f"""**Tipo:** {safe_get(r,'tipo_ticket')}
-**Status:** {safe_get(r,'status')}
-**Solicitante:** {safe_get(r,'solicitante_nome')}
-**Responsável:** {safe_get(r,'responsavel_nome')}
-**Abertura:** {abertura_fmt}"""
-    )
-
-    # Mostra thread se botão pressionado
-    if btn_thread:
-        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
+    if st.button("💬 Ver Thread Slack"):
+        msgs = fetch_thread(r["canal_id"], str(r["thread_ts"]))
         if msgs:
-            st.success(f"{len(msgs)} mensagens")
-            st.markdown("---")
+            st.success(f"{len(msgs)} mensagens na thread")
             for m in msgs:
-                ts   = pd.to_datetime(float(m["ts"]), unit="s")
+                ts = pd.to_datetime(float(m["ts"]), unit="s")
                 user = get_nome_real(m.get("user", ""))
-                txt  = m.get("text", "")
-                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
-                bg   = "#E3F2FD" if pin else "#fff"
+                txt = m.get("text", "")
+                pin = "📌 " if m["ts"] == str(r["thread_ts"]) else ""
+                bg = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
                     f"<strong>{pin}{user}</strong> "
