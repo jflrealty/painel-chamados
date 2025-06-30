@@ -72,7 +72,9 @@ def fetch_thread(channel_id, thread_ts):
         st.error("❌ Dados incompletos para buscar a thread (canal ou thread_ts ausente).")
         return []
     try:
-        return slack_client.conversations_replies(channel=str(channel_id), ts=str(thread_ts), limit=200)["messages"][::-1]
+        # Slack exige que o ts seja string no formato "1729473929.218833"
+        ts_str = f"{float(thread_ts):.6f}"
+        return slack_client.conversations_replies(channel=str(channel_id), ts=ts_str, limit=200)["messages"][::-1]
     except SlackApiError as e:
         st.error(f"Erro Slack: `{e.response['error']}`")
         return []
