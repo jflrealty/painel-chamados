@@ -69,12 +69,15 @@ def parse_reaberturas(txt, os_id, resp_nome, data_abertura):
 
 def fetch_thread(channel_id, thread_ts):
     if not (channel_id and thread_ts and SLACK_BOT_TOKEN):
+        st.error("❌ Dados incompletos para buscar a thread (canal ou thread_ts ausente).")
         return []
     try:
-        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
-        return resp["messages"][::-1]
+        return slack_client.conversations_replies(channel=str(channel_id), ts=str(thread_ts), limit=200)["messages"][::-1]
     except SlackApiError as e:
-        st.error(f"Erro Slack: {e.response['error']}")
+        st.error(f"Erro Slack: `{e.response['error']}`")
+        return []
+    except Exception as e:
+        st.error(f"Erro inesperado: {e}")
         return []
 
 def safe_get(row: dict, col: str, default="-"):
@@ -259,7 +262,32 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
 **Abertura:** {abertura_fmt}""")
 
     if st.button("💬 Ver thread Slack", key=f"thread_{safe_get(r,'id')}"):
-        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
+    canal_id = safe_get(r, "canal_id")
+    thread_ts = safe_get(r, "thread_ts")
+
+    st.markdown(f"🔍 `canal_id`: `{canal_id}`")
+    st.markdown(f"🔍 `thread_ts`: `{thread_ts}`")
+
+    if not canal_id or not thread_ts or pd.isna(canal_id) or pd.isna(thread_ts):
+        st.warning("⚠️ Esse chamado não possui canal_id ou thread_ts válidos.")
+    else:
+        msgs = fetch_thread(str(canal_id), str(thread_ts))
+        if msgs:
+            st.success(f"{len(msgs)} mensagens")
+            for m in msgs:
+                ts   = pd.to_datetime(float(m["ts"]), unit="s")
+                user = get_nome_real(m.get("user", ""))
+                txt  = m.get("text", "")
+                pin  = "📌 " if m["ts"] == thread_ts else ""
+                bg   = "#E3F2FD" if pin else "#fff"
+                st.markdown(
+                    f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
+                    f"<strong>{pin}{user}</strong> "
+                    f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("Nenhuma mensagem encontrada ou canal/thread inválido.")
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
