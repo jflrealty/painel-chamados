@@ -176,34 +176,21 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Debug: mostra colunas reais do DataFrame
-st.text("📋 Colunas reais do df:\n" + "\n".join(df.columns))
+# 1) Remove duplicadas e converte col-names p/ string
+df = df.loc[:, ~df.columns.duplicated()].copy()
+df.columns = df.columns.map(str)
 
-# Lista que desejamos
+# 2) Colunas desejadas para a grade
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# Converte nomes para string e remove duplicadas
-df.columns = df.columns.map(str)
-df = df.loc[:, ~df.columns.duplicated()].copy()
+# 3) reindex → se faltar alguma, já entra com None (evita KeyError)
+df_grid = df.reindex(columns=grid_cols, fill_value=None).copy()
 
-# Garante que todas as colunas estejam presentes
-for col in grid_cols:
-    if col not in df.columns:
-        st.warning(f"⚠️ Coluna ausente: {col} — preenchendo com None")
-        df[col] = None
-
-# Novo DataFrame seguro
-try:
-    df_grid = df[grid_cols].copy()
-except KeyError as e:
-    st.error(f"❌ KeyError ao montar df_grid: {e}")
-    st.stop()
-
-# AgGrid config
+# 4) AgGrid
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -211,7 +198,6 @@ gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
-# AgGrid render
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
@@ -220,35 +206,36 @@ sel = AgGrid(
     theme="streamlit",
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
-# -------- helper ----------
-def v(row, col, default="-"):
+
+# Helper seguro
+def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# -------- detalhes ----------
-if sel_rows:
-    r = sel_rows[0]
-    st.markdown(f"### 📝 Detalhes OS {v(r,'id')}")
+# Detalhes
+if sel:
+    r = sel[0]
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
+    abertura_fmt = "-"
     try:
-        dt_fmt = pd.to_datetime(v(r, "data_abertura", "")).strftime("%d/%m/%Y %H:%M")
+        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura", "")).strftime("%d/%m/%Y %H:%M")
     except Exception:
-        dt_fmt = "-"
+        pass
 
-    st.write(
-f"""**Tipo:** {v(r,'tipo_ticket')} • **Status:** {v(r,'status')}
-**Solicitante:** {v(r,'solicitante_nome')}
-**Responsável:** {v(r,'responsavel_nome')}
-**Abertura:** {dt_fmt}"""
-    )
+    st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
+**Status:** {safe_get(r,'status')}
+**Solicitante:** {safe_get(r,'solicitante_nome')}
+**Responsável:** {safe_get(r,'responsavel_nome')}
+**Abertura:** {abertura_fmt}""")
 
-    if st.button("💬 Ver thread Slack", key=f"thr_{v(r,'id')}"):
-        msgs = fetch_thread(v(r,"canal_id"), v(r,"thread_ts"))
+    if st.button("💬 Ver thread Slack", key=f"thread_{safe_get(r,'id')}"):
+        msgs = fetch_thread(safe_get(r,"canal_id"), safe_get(r,"thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
-                ts = pd.to_datetime(float(m["ts"]), unit="s")
+                ts   = pd.to_datetime(float(m["ts"]), unit="s")
                 user = get_nome_real(m.get("user",""))
                 txt  = m.get("text","")
-                pin  = "📌 " if m["ts"] == v(r,"thread_ts") else ""
+                pin  = "📌 " if m["ts"] == safe_get(r,"thread_ts") else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
