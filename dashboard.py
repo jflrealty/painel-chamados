@@ -119,10 +119,9 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         engine = create_engine(url, pool_pre_ping=True, future=True)
 
-        # ✅ compatível com pandas 2.3 + sqlalchemy 1.4.x
         with engine.connect() as conn:
             result = conn.execute(text("SELECT * FROM ordens_servico"))
-            df = pd.DataFrame(result.mappings().all())
+            df = pd.DataFrame(result.mappings().all())  # ✅ seguro no pandas 2.3
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
@@ -131,7 +130,7 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return df, pd.DataFrame()
 
-    ...
+    return df, pd.DataFrame()
 
     # --------------------------- tratamento ---------------------------
     obrig = [
