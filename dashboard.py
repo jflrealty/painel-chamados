@@ -238,19 +238,33 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 )["selected_rows"]
 
-# Detalhes + thread Slack
+# ─────────────── Detalhes + Thread Slack ───────────────
 if sel:
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {r['id']}")
+    st.markdown(f"### 📝 Detalhes OS {r.get('id','-')}")
+
+    tipo = r.get('tipo_ticket', '-')
+    status = r.get('status', '-')
+    solicitante = r.get('solicitante_nome', '-')
+    responsavel = r.get('responsavel_nome', '-')
+    abertura = r.get('data_abertura', '')
+
+    try:
+        abertura_fmt = pd.to_datetime(abertura).strftime('%d/%m/%Y %H:%M') if abertura else "-"
+    except Exception:
+        abertura_fmt = "-"
+
     st.write(
-        f"""**Tipo:** {r.get('tipo_ticket','')}  •  **Status:** {r.get('status','')}
-**Solicitante:** {r.get('solicitante_nome','')}
-**Responsável:** {r.get('responsavel_nome','')}
-**Abertura:** {pd.to_datetime(r['data_abertura']).strftime('%d/%m/%Y %H:%M')}"""
+        f"""**Tipo:** {tipo}  •  **Status:** {status}
+**Solicitante:** {solicitante}
+**Responsável:** {responsavel}
+**Abertura:** {abertura_fmt}"""
     )
 
-    if st.button("💬 Ver thread Slack", key=f"btn_thread_{r['id']}"):
-        msgs = fetch_thread(r.get("canal_id"), r.get("thread_ts"))
+    if st.button("💬 Ver thread Slack", key=f"btn_thread_{r.get('id')}"):
+        canal_id = r.get("canal_id")
+        thread_ts = r.get("thread_ts")
+        msgs = fetch_thread(canal_id, thread_ts)
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             st.markdown("---")
@@ -258,7 +272,7 @@ if sel:
                 ts   = pd.to_datetime(float(m["ts"]), unit="s")
                 user = get_nome_real(m.get("user", ""))
                 txt  = m.get("text", "")
-                pin  = "📌 " if m["ts"] == r.get("thread_ts") else ""
+                pin  = "📌 " if m["ts"] == thread_ts else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
@@ -267,7 +281,7 @@ if sel:
                     unsafe_allow_html=True,
                 )
         else:
-            st.info("Nenhuma mensagem / canal inválido.")
+            st.info("Nenhuma mensagem ou canal inválido.")
 
 # ─────────── Gráficos ───────────
 st.subheader("📊 Distribuição e Fechamento")
