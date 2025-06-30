@@ -100,6 +100,8 @@ def fetch_thread(channel_id: str, thread_ts: str) -> list[dict]:
         return []
 
 # ─────────────────────────── Data Loading ───────────────────────────
+from sqlalchemy.orm import sessionmaker
+
 @st.cache_data(show_spinner=False)
 def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
     url = os.getenv("DATA_PUBLIC_URL", "")
@@ -107,19 +109,18 @@ def carregar_dados() -> tuple[pd.DataFrame, pd.DataFrame]:
         st.error("❌ DATA_PUBLIC_URL não definida.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # adapta URI + SSL
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     if "sslmode" not in url:
         url += "?sslmode=require"
 
     try:
-        # 🔑 O segredo: usar apenas create_engine() e passar para read_sql
-        engine = create_engine(url, pool_pre_ping=True)
-        query = "SELECT * FROM ordens_servico"
-
-        # 🧠 pandas fala direto com o engine — não precisa open/close
-        df = pd.read_sql(query, con=engine)
+        # Cria engine e session
+        engine = create_engine(url, pool_pre_ping=True, future=True)
+        Session = sessionmaker(bind=engine)
+        with Session() as session:
+            with session.connection() as conn:
+                df = pd.read_sql("SELECT * FROM ordens_servico", con=conn)
 
     except Exception as e:
         st.error(f"❌ Erro ao ler o banco: {e}")
