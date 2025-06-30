@@ -200,32 +200,25 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# 1. Corrige e sanitiza nomes de colunas
-df.columns = (
-    pd.Series(df.columns)
-    .astype(str)
-    .str.strip()
-    .str.replace(r"[\n\r\t]", "", regex=True)
-    .str.replace("\ufeff", "")  # remove BOM
-)
+# Garante que colunas necessárias estão disponíveis ANTES dos filtros
+df["responsavel_nome"] = df.get("responsavel", "").apply(get_nome_real)
+df["solicitante_nome"] = df.get("solicitante", "").apply(get_nome_real)
+df["capturado_nome"] = df.get("capturado_por", "").apply(get_nome_real)
 
-# 2. Lista de colunas que queremos usar no grid
+# Lista de colunas da grade
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
 
-# 3. Garante que todas existam (preenche faltantes com None)
+# Verifica e adiciona colunas ausentes
 for col in grid_cols:
     if col not in df.columns:
-        st.warning(f"⚠️ Coluna ausente: '{col}' — preenchida com None.")
         df[col] = None
 
-# 4. Reindexa com segurança (garante a ordem correta sem KeyError)
-df_grid = df.reindex(columns=grid_cols).copy()
-
-# 5. Configura grade
+# Reindexa com segurança e prepara grade
+df_grid = df[grid_cols].copy()
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -233,7 +226,7 @@ gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
 gb.configure_selection("single")
 
-# 6. Exibe grid
+# Mostra grade
 sel = AgGrid(
     df_grid,
     gridOptions=gb.build(),
@@ -243,19 +236,19 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# Helper seguro
+# Safe getter
 def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# Detalhes
-if sel:
+# Detalhes do chamado
+if sel and isinstance(sel[0], dict):
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
-    abertura_fmt = "-"
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
+
     try:
-        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura", "")).strftime("%d/%m/%Y %H:%M")
+        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
-        pass
+        abertura_fmt = "-"
 
     st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
 **Status:** {safe_get(r,'status')}
@@ -264,14 +257,14 @@ if sel:
 **Abertura:** {abertura_fmt}""")
 
     if st.button("💬 Ver thread Slack", key=f"thread_{safe_get(r,'id')}"):
-        msgs = fetch_thread(safe_get(r,"canal_id"), safe_get(r,"thread_ts"))
+        msgs = fetch_thread(safe_get(r, "canal_id"), safe_get(r, "thread_ts"))
         if msgs:
             st.success(f"{len(msgs)} mensagens")
             for m in msgs:
                 ts   = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user",""))
-                txt  = m.get("text","")
-                pin  = "📌 " if m["ts"] == safe_get(r,"thread_ts") else ""
+                user = get_nome_real(m.get("user", ""))
+                txt  = m.get("text", "")
+                pin  = "📌 " if m["ts"] == safe_get(r, "thread_ts") else ""
                 bg   = "#E3F2FD" if pin else "#fff"
                 st.markdown(
                     f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
