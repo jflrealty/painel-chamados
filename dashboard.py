@@ -77,9 +77,11 @@ def fetch_thread(channel_id, thread_ts):
         st.error(f"Erro Slack: {e.response['error']}")
         return []
 
-def safe_get(row, key, default="-"):
+def safe_get(row: dict, col: str, default="-"):
     try:
-        return row.get(key, default) if isinstance(row, dict) else row[key]
+        if isinstance(row, dict):
+            return row.get(col, default)
+        return default
     except Exception:
         return default
 
@@ -192,9 +194,11 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-if sel:
+if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
+else:
+    st.info("Clique em um chamado para ver os detalhes.")
     try:
         abertura_fmt = pd.to_datetime(r["data_abertura"]).strftime('%d/%m/%Y %H:%M')
     except Exception:
