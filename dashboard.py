@@ -176,18 +176,24 @@ st.markdown("---")
 # ───────────── Grade + Detalhes ─────────────
 st.subheader("📄 Chamados (clique em uma linha)")
 
-# Garante que colunas críticas existam
-for c in ("canal_id", "thread_ts", "solicitante_nome", "responsavel_nome"):
-    if c not in df.columns:
-        df[c] = None
+# Converte colunas para string (evita KeyError por dtype estranho)
+df.columns = df.columns.map(str)
 
+# Colunas esperadas na grade
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
     "data_abertura", "canal_id", "thread_ts",
 ]
-df_grid = df[[col for col in grid_cols if col in df.columns]].copy()
 
+# Garante que todas existam
+for col in grid_cols:
+    if col not in df.columns:
+        df[col] = None
+
+df_grid = df[grid_cols].copy()
+
+# AgGrid configuração
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
@@ -204,12 +210,14 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
+# Helper seguro
 def safe_get(row, col, default="-"):
     try:
         return row[col] if col in row else default
     except Exception:
         return default
 
+# Exibe detalhes do chamado
 if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
