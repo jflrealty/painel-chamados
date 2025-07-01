@@ -1,9 +1,0 @@
-streamlit
-psycopg2-binary
-slack_sdk
-matplotlib
-xlsxwriter
-python-dotenv
-streamlit-aggrid
-sqlalchemy>=2.0
-pandas>=2.0
