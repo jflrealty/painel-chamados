@@ -11,7 +11,7 @@ Painel Streamlit para acompanhar chamados comerciais JFL
 from __future__ import annotations
 
 # ═══════════════════════ Imports ═══════════════════════════
-import os, io, json, re
+import io, json, re
 from datetime import date
 
 import pandas as pd
@@ -21,9 +21,8 @@ from sqlalchemy import create_engine, text
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from dotenv import load_dotenv
 
-from utils.slack import get_nome_real
+from utils.slack import get_nome_real  # helper de nomes reais
 
 # ═══════════════ Ambiente / tokens ═════════════════════════
 SLACK_BOT_TOKEN = st.secrets.get("SLACK_BOT_TOKEN", "")
@@ -59,11 +58,11 @@ st.markdown("---")
 # ═══════════════ Helpers ══════════════════════════════════
 _reab = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
 
-def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str, data_abertura: pd.Timestamp):
+def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str, data_abertura):
     """Extrai texto de reaberturas → lista de dicionários"""
     if not txt:
         return []
-    regs: list[dict] = []
+    regs = []
     for linha in filter(None, map(str.strip, txt.splitlines())):
         m = _reab.match(linha)
         if m:
@@ -89,7 +88,7 @@ def fetch_thread(channel_id: str | None, thread_ts: str | None):
         return []
     try:
         resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts, limit=200)
-        return resp["messages"][::-1]
+        return resp["messages"][::-1]  # ordem cronológica
     except SlackApiError as e:
         st.error(f"Erro Slack: {e.response['error']}")
         return []
@@ -115,7 +114,7 @@ def carregar_dados():
     if df.empty:
         return df, pd.DataFrame()
 
-    # Preenche campos mínimos
+    # Campos obrigatórios faltantes → None
     obrig = [
         "responsavel", "solicitante", "capturado_por", "status",
         "data_abertura", "data_fechamento", "log_edicoes",
@@ -128,7 +127,6 @@ def carregar_dados():
     # Nomes legíveis
     df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
     df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
 
     # Datas
     df["data_abertura"]   = pd.to_datetime(df["data_abertura"], errors="coerce")
@@ -136,8 +134,9 @@ def carregar_dados():
     df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
 
     # df_alt (edições + reaberturas)
-    regs: list[dict] = []
+    regs = []
     for _, r in df.iterrows():
+        # edições
         if r["log_edicoes"]:
             try:
                 for campo, mud in json.loads(r["log_edicoes"]).items():
@@ -155,6 +154,7 @@ def carregar_dados():
                     )
             except Exception:
                 pass
+        # reaberturas
         regs += parse_reaberturas(
             r.get("historico_reaberturas"),
             r["id"],
@@ -171,7 +171,7 @@ if df.empty:
     st.info("📭 Nenhum chamado encontrado.")
     st.stop()
 
-# Filtros ----------------------------------------------------------------
+# ─── Filtros laterais ───
 today = date.today()
 min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
 ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
@@ -188,7 +188,7 @@ if sel_resp:
     if not df_alt.empty:
         df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
 
-# Métricas ----------------------------------------------------------------
+# ─── Métricas ───
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
 c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
@@ -197,16 +197,15 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 st.markdown("---")
 
-# ───────────── Grade com seleção persistente ─────────────
+# ───────────── Grade ─────────────
 st.subheader("📄 Chamados")
 
-df_grid = df.copy()
 grid_cols = [
     "id", "tipo_ticket", "status",
     "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts"
+    "data_abertura", "canal_id", "thread_ts",
 ]
-df_grid = df_grid.reindex(columns=grid_cols)
+df_grid = df.reindex(columns=grid_cols)
 
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
@@ -224,19 +223,11 @@ sel_result = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# ───────────────── Seleção segura ─────────────────────
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
-    r = sel[0]
-    st.session_state["chamado_selecionado"] = r
-elif "chamado_selecionado" in st.session_state:
-    r = st.session_state["chamado_selecionado"]
-else:
-    r = None
-
-# ───────────────── Detalhes + Botão Ver Thread ─────────────────────
-if r:
+# ─── Detalhes + Thread ───
+if isinstance(sel_result, list) and len(sel_result) > 0 and isinstance(sel_result[0], dict):
+    r = sel_result[0]
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-    
+
     try:
         abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
@@ -248,10 +239,10 @@ if r:
 **Responsável:** {safe_get(r,'responsavel_nome')}
 **Abertura:** {abertura_fmt}""")
 
-    if st.button("💬 Ver Thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
+    # POP-UP (expander) com a thread
+    with st.expander("💬 Ver Thread Slack"):
         canal = str(safe_get(r, "canal_id"))
-        ts = str(safe_get(r, "thread_ts"))
-
+        ts    = str(safe_get(r, "thread_ts"))
         if canal and ts and ts.replace(".", "", 1).isdigit():
             msgs = fetch_thread(canal, ts)
             if msgs:
@@ -259,9 +250,9 @@ if r:
                 for m in msgs:
                     ts_msg = pd.to_datetime(float(m["ts"]), unit="s")
                     user = get_nome_real(m.get("user", ""))
-                    txt = m.get("text", "")
-                    pin = "📌 " if m["ts"] == ts else ""
-                    bg = "#E3F2FD" if pin else "#fff"
+                    txt  = m.get("text", "")
+                    pin  = "📌 " if m["ts"] == ts else ""
+                    bg   = "#E3F2FD" if pin else "#fff"
                     st.markdown(
                         f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
                         f"<strong>{pin}{user}</strong> "
@@ -274,8 +265,8 @@ if r:
             st.error("❌ Canal ou thread inválidos.")
 else:
     st.info("📌 Selecione um chamado para visualizar os detalhes.")
-    
-# ═══════════════ Gráficos ════════════════════════════════
+
+# ─── Gráficos ───
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
 
@@ -286,15 +277,13 @@ with g1:
     ax.set_title("Por Tipo de Ticket", fontsize=9)
     ax.tick_params(axis="x", labelrotation=25, labelsize=7)
     ax.tick_params(axis="y", labelsize=7)
-    for s in ax.spines.values(): s.set_visible(False)
+    ax.spines[['top','right','left','bottom']].set_visible(False)
     st.pyplot(fig)
 
 with g2:
     fech = df[df["data_fechamento"].notna()]
-    st.metric(
-        "🗓️ Tempo médio de fechamento",
-        f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-"
-    )
+    st.metric("🗓️ Tempo médio de fechamento",
+              f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-")
     if not fech.empty:
         fig2, ax2 = plt.subplots(figsize=(4, 2))
         fech["dias_para_fechamento"].hist(ax=ax2, bins=6, color="#34A853")
@@ -302,16 +291,16 @@ with g2:
         ax2.set_ylabel("Chamados", fontsize=8)
         ax2.set_title("Dias até Fechamento", fontsize=9)
         ax2.tick_params(axis="both", labelsize=7)
-        for s in ax2.spines.values(): s.set_visible(False)
+        ax2.spines[['top','right','left','bottom']].set_visible(False)
         st.pyplot(fig2)
 
-# ═══════════════ Alterações + Exportações ═════════════════
+# ─── Alterações / Export ───
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
     st.info("Não há alterações para o filtro atual.")
 else:
     vis = df_alt.rename(columns={"id": "OS", "quando": "Data", "quem": "Usuário"})
-    a, b = st.columns([2, 1])
+    a, b = st.columns([2,1])
 
     with a:
         st.dataframe(vis, use_container_width=True)
@@ -330,9 +319,10 @@ else:
         ax3.set_xlabel("Alterações", fontsize=8)
         ax3.set_title("Top Alteradores", fontsize=9)
         ax3.tick_params(axis="both", labelsize=7)
-        for s in ax3.spines.values(): s.set_visible(False)
+        ax3.spines[['top','right','left','bottom']].set_visible(False)
         st.pyplot(fig3)
 
+# Exportações
 st.subheader("📦 Exportar")
 csv_main = df.to_csv(index=False).encode()
 csv_alt  = df_alt.to_csv(index=False).encode()
@@ -342,19 +332,11 @@ c_csv, c_xlsx, a_csv, a_xlsx = st.columns(4)
 c_csv.download_button("⬇️ Chamados CSV", csv_main, "chamados.csv", "text/csv")
 
 buf = io.BytesIO(); df.to_excel(buf, index=False, engine="xlsxwriter")
-c_xlsx.download_button(
-    "📊 Chamados XLSX",
-    buf.getvalue(),
-    "chamados.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
+c_xlsx.download_button("📊 Chamados XLSX", buf.getvalue(), "chamados.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 a_csv.download_button("⬇️ Alterações CSV", csv_alt, "alteracoes.csv", "text/csv")
 
 buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
-a_xlsx.download_button(
-    "📊 Alterações XLSX",
-    buf2.getvalue(),
-    "alteracoes.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
+a_xlsx.download_button("📊 Alterações XLSX", buf2.getvalue(), "alteracoes.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
