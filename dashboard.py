@@ -224,15 +224,19 @@ sel_result = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
-# Armazena a seleção na session_state
-if isinstance(sel_result, list) and sel_result:
-    st.session_state["chamado_selecionado"] = sel_result[0]
+# ───────────────── Seleção segura ─────────────────────
+if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
+    r = sel[0]
+    st.session_state["chamado_selecionado"] = r
+elif "chamado_selecionado" in st.session_state:
+    r = st.session_state["chamado_selecionado"]
+else:
+    r = None
 
-# Renderiza os detalhes do chamado selecionado
-r = st.session_state.get("chamado_selecionado")
-
+# ───────────────── Detalhes + Botão Ver Thread ─────────────────────
 if r:
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
+    
     try:
         abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
@@ -244,7 +248,7 @@ if r:
 **Responsável:** {safe_get(r,'responsavel_nome')}
 **Abertura:** {abertura_fmt}""")
 
-    if st.button("💬 Ver Thread Slack"):
+    if st.button("💬 Ver Thread Slack", key=f"btn_thread_{safe_get(r, 'id')}"):
         canal = str(safe_get(r, "canal_id"))
         ts = str(safe_get(r, "thread_ts"))
 
@@ -269,7 +273,7 @@ if r:
         else:
             st.error("❌ Canal ou thread inválidos.")
 else:
-    st.info("📌 Selecione um chamado na tabela acima para ver os detalhes.")
+    st.info("📌 Selecione um chamado para visualizar os detalhes.")
     
 # ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
