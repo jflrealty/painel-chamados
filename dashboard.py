@@ -306,31 +306,6 @@ with g2:
         for s in ax2.spines.values(): s.set_visible(False)
         st.pyplot(fig2)
 
-# ───────────── TESTE ISOLADO DA THREAD ─────────────
-st.markdown("---")
-st.subheader("🧪 Teste Isolado da API do Slack")
-
-channel_id = "C06TTKNEBHA"
-thread_ts = "1749246526.039919"
-
-if st.button("Ver Thread de Teste"):
-    msgs = fetch_thread(channel_id, thread_ts)
-    if msgs:
-        st.success(f"✅ {len(msgs)} mensagens na thread")
-        for m in msgs:
-            ts = pd.to_datetime(float(m["ts"]), unit="s")
-            user = get_nome_real(m.get("user", ""))
-            txt = m.get("text", "")
-            st.markdown(
-                f"<div style='background:#F4F6F7;padding:8px;border-left:4px solid #3E84F4;'>"
-                f"<strong>{user}</strong> "
-                f"<span style='color:#777;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
-                unsafe_allow_html=True,
-            )
-    else:
-        st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
-
-
 # ═══════════════ Alterações + Exportações ═════════════════
 st.markdown("## 🔄 Alterações (edições + reaberturas)")
 if df_alt.empty:
