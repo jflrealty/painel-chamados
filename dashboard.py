@@ -26,9 +26,8 @@ from dotenv import load_dotenv
 from utils.slack import get_nome_real
 
 # ═══════════════ Ambiente / tokens ═════════════════════════
-load_dotenv()
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
-DATA_PUBLIC_URL = os.getenv("DATA_PUBLIC_URL", "")
+SLACK_BOT_TOKEN = st.secrets.get("SLACK_BOT_TOKEN", "")
+DATA_PUBLIC_URL = st.secrets.get("DATA_PUBLIC_URL", "")
 
 if not DATA_PUBLIC_URL:
     st.error("❌ DATA_PUBLIC_URL não definida.")
