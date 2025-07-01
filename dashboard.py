@@ -360,28 +360,26 @@ a_xlsx.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
 
-import streamlit as st
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-
-# Usar secrets do Streamlit
-SLACK_BOT_TOKEN = st.secrets.get("SLACK_BOT_TOKEN", "")
-slack_client = WebClient(token=SLACK_BOT_TOKEN)
+# ───────────── TESTE ISOLADO DA THREAD ─────────────
+st.markdown("---")
+st.subheader("🧪 Teste Isolado da API do Slack")
 
 channel_id = "C06TTKNEBHA"
 thread_ts = "1749246526.039919"
 
-st.title("🔍 Teste de Thread do Slack")
-
 if st.button("Ver Thread de Teste"):
-    try:
-        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts)
-        messages = resp.get("messages", [])
-        st.success(f"Encontradas {len(messages)} mensagens")
-        for m in messages:
-            user = m.get("user", "-")
-            text = m.get("text", "")
-            ts = m.get("ts", "")
-            st.markdown(f"**{user}** [{ts}] → {text}")
-    except SlackApiError as e:
-        st.error(f"Erro Slack: {e.response['error']}")
+    msgs = fetch_thread(channel_id, thread_ts)
+    if msgs:
+        st.success(f"✅ {len(msgs)} mensagens na thread")
+        for m in msgs:
+            ts = pd.to_datetime(float(m["ts"]), unit="s")
+            user = get_nome_real(m.get("user", ""))
+            txt = m.get("text", "")
+            st.markdown(
+                f"<div style='background:#F4F6F7;padding:8px;border-left:4px solid #3E84F4;'>"
+                f"<strong>{user}</strong> "
+                f"<span style='color:#777;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
