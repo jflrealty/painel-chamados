@@ -225,7 +225,7 @@ sel_result = AgGrid(
 ).get("selected_rows", [])
 
 # Armazena a seleção na session_state
-if sel_result and isinstance(sel_result[0], dict):
+if isinstance(sel_result, list) and sel_result:
     st.session_state["chamado_selecionado"] = sel_result[0]
 
 # Renderiza os detalhes do chamado selecionado
