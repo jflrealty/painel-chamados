@@ -197,40 +197,42 @@ c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3>
 c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
 st.markdown("---")
 
-# ───────────── Grade + Thread integrada ─────────────
-st.subheader("📄 Chamados")          # <-- título sem “(clique …)”
+# ───────────── Grade com seleção persistente ─────────────
+st.subheader("📄 Chamados")
 
-# grade de chamados (campos visíveis + ocultos p/ slack)
-grid_cols   = ["id", "tipo_ticket", "status",
-               "solicitante_nome", "responsavel_nome",
-               "data_abertura",   "canal_id", "thread_ts"]
-df_grid     = df.reindex(columns=grid_cols)          # preenche ausentes c/ NaN
-gb          = GridOptionsBuilder.from_dataframe(df_grid)
+df_grid = df.copy()
+grid_cols = [
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura", "canal_id", "thread_ts"
+]
+df_grid = df_grid.reindex(columns=grid_cols)
+
+gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_column("canal_id",  hide=True)          # ocultos
+gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
-gb.configure_selection("single")                     # seleção de 1 linha
+gb.configure_selection("single")
 
-sel = AgGrid(
+sel_result = AgGrid(
     df_grid,
-    gridOptions   = gb.build(),
-    update_mode   = GridUpdateMode.SELECTION_CHANGED,
-    height        = 300,
-    theme         = "streamlit",
-    fit_columns_on_grid_load = True,
-)["selected_rows"]
+    gridOptions=gb.build(),
+    update_mode=GridUpdateMode.SELECTION_CHANGED,
+    height=300,
+    theme="streamlit",
+    fit_columns_on_grid_load=True,
+).get("selected_rows", [])
 
-# helper seguro ---------------------------------------------------------
-def safe_get(row: dict, col: str, default="-"):
-    return row.get(col, default) if isinstance(row, dict) else default
+# Armazena a seleção na session_state
+if sel_result and isinstance(sel_result[0], dict):
+    st.session_state["chamado_selecionado"] = sel_result[0]
 
+# Renderiza os detalhes do chamado selecionado
+r = st.session_state.get("chamado_selecionado")
 
-# ℹ️ Detalhes + Thread
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
-    r = sel[0]
+if r:
     st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-
     try:
         abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
     except Exception:
@@ -242,9 +244,7 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
 **Responsável:** {safe_get(r,'responsavel_nome')}
 **Abertura:** {abertura_fmt}""")
 
-    ver_thread = st.button("💬 Ver Thread Slack", key=f"btn_thread_{safe_get(r, 'id')}")
-
-    if ver_thread:
+    if st.button("💬 Ver Thread Slack"):
         canal = str(safe_get(r, "canal_id"))
         ts = str(safe_get(r, "thread_ts"))
 
@@ -269,8 +269,7 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
         else:
             st.error("❌ Canal ou thread inválidos.")
 else:
-    st.info("📌 Selecione um chamado para visualizar os detalhes.")
-
+    st.info("📌 Selecione um chamado na tabela acima para ver os detalhes.")
     
 # ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
