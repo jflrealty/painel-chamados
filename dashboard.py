@@ -21,7 +21,6 @@ from sqlalchemy import create_engine, text
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from dotenv import load_dotenv
 
 from utils.slack import get_nome_real
 
@@ -60,7 +59,6 @@ st.markdown("---")
 _reab = re.compile(r"\[(\d{4}-\d{2}-\d{2})]\s+(.+?)\s+(.*)")
 
 def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str, data_abertura: pd.Timestamp):
-    """Extrai texto de reaberturas → lista de dicionários"""
     if not txt:
         return []
     regs: list[dict] = []
@@ -84,7 +82,6 @@ def parse_reaberturas(txt: str | None, os_id: int, resp_nome: str, data_abertura
     return regs
 
 def fetch_thread(channel_id: str | None, thread_ts: str | None):
-    """Busca mensagens da thread no Slack."""
     if not (channel_id and thread_ts and SLACK_BOT_TOKEN):
         return []
     try:
@@ -97,266 +94,23 @@ def fetch_thread(channel_id: str | None, thread_ts: str | None):
 def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# ═══════════════ Carregamento base ════════════════════════
-@st.cache_data(show_spinner=False)
-def carregar_dados():
-    url = DATA_PUBLIC_URL.replace("postgres://", "postgresql+psycopg2://")
-    if "sslmode" not in url:
-        url += "?sslmode=require"
-
-    try:
-        engine = create_engine(url, pool_pre_ping=True, future=True)
-        with engine.connect() as conn:
-            df = pd.read_sql(text("SELECT * FROM ordens_servico"), conn)
-    except Exception as e:
-        st.error(f"❌ Erro ao ler o banco: {e}")
-        return pd.DataFrame(), pd.DataFrame()
-
-    if df.empty:
-        return df, pd.DataFrame()
-
-    # Preenche campos mínimos
-    obrig = [
-        "responsavel", "solicitante", "capturado_por", "status",
-        "data_abertura", "data_fechamento", "log_edicoes",
-        "historico_reaberturas", "data_ultima_edicao", "ultimo_editor",
-    ]
-    for col in obrig:
-        if col not in df.columns:
-            df[col] = None
-
-    # Nomes legíveis
-    df["responsavel_nome"] = df["responsavel"].apply(get_nome_real)
-    df["solicitante_nome"] = df["solicitante"].apply(get_nome_real)
-    df["capturado_nome"]   = df["capturado_por"].apply(get_nome_real)
-
-    # Datas
-    df["data_abertura"]   = pd.to_datetime(df["data_abertura"], errors="coerce")
-    df["data_fechamento"] = pd.to_datetime(df["data_fechamento"], errors="coerce")
-    df["dias_para_fechamento"] = (df["data_fechamento"] - df["data_abertura"]).dt.days
-
-    # df_alt (edições + reaberturas)
-    regs: list[dict] = []
-    for _, r in df.iterrows():
-        if r["log_edicoes"]:
-            try:
-                for campo, mud in json.loads(r["log_edicoes"]).items():
-                    regs.append(
-                        dict(
-                            id=r["id"],
-                            quando=pd.to_datetime(r["data_ultima_edicao"], errors="coerce"),
-                            quem=r.get("ultimo_editor") or "-",
-                            descricao=f"{campo}: {mud.get('de')} → {mud.get('para')}",
-                            campo=campo,
-                            de=mud.get("de"), para=mud.get("para"),
-                            responsavel_nome=r["responsavel_nome"],
-                            data_abertura=r["data_abertura"],
-                        )
-                    )
-            except Exception:
-                pass
-        regs += parse_reaberturas(
-            r.get("historico_reaberturas"),
-            r["id"],
-            r["responsavel_nome"],
-            r["data_abertura"],
-        )
-
-    df_alt = pd.DataFrame(regs).sort_values("quando", ascending=False) if regs else pd.DataFrame()
-    return df, df_alt
-
-# ═══════════════ Main =================================================
-df, df_alt = carregar_dados()
-if df.empty:
-    st.info("📭 Nenhum chamado encontrado.")
-    st.stop()
-
-# Filtros ----------------------------------------------------------------
-today = date.today()
-min_d, max_d = df["data_abertura"].min().date(), df["data_abertura"].max().date()
-ini, fim = st.sidebar.date_input("🗓️ Período:", [min_d, max_d], max_value=today)
-
-mask = df["data_abertura"].dt.date.between(ini, fim)
-df = df[mask]
-if not df_alt.empty:
-    df_alt = df_alt[df_alt["data_abertura"].dt.date.between(ini, fim)]
-
-resp_opts = sorted(df["responsavel_nome"].dropna().unique())
-sel_resp = st.sidebar.multiselect("🧑‍💼 Responsável:", resp_opts)
-if sel_resp:
-    df = df[df["responsavel_nome"].isin(sel_resp)]
-    if not df_alt.empty:
-        df_alt = df_alt[df_alt["responsavel_nome"].isin(sel_resp)]
-
-# Métricas ----------------------------------------------------------------
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.markdown(f"<div class='card'><h3>{len(df)}</h3><p>Total</p></div>", True)
-c2.markdown(f"<div class='card'><h3>{df['status'].isin(['aberto','em analise']).sum()}</h3><p>Em Atendimento</p></div>", True)
-c3.markdown(f"<div class='card'><h3>{df['data_fechamento'].notna().sum()}</h3><p>Finalizados</p></div>", True)
-c4.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']<=2).sum()}</h3><p>Dentro SLA</p></div>", True)
-c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><p>Fora SLA</p></div>", True)
-st.markdown("---")
-
-# ───────────── Grade + Thread integrada ─────────────
-st.subheader("📄 Chamados")
-
-# Clona o df para a grid
-df_grid = df.copy()
-
-# Colunas da grade + campos ocultos
-grid_cols = [
-    "id", "tipo_ticket", "status",
-    "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts"
-]
-
-df_grid = df_grid.reindex(columns=grid_cols)
-
-# Configura grade
-gb = GridOptionsBuilder.from_dataframe(df_grid)
-gb.configure_pagination()
-gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_column("canal_id", hide=True)
-gb.configure_column("thread_ts", hide=True)
-gb.configure_selection("single")
-
-sel = AgGrid(
-    df_grid,
-    gridOptions=gb.build(),
-    update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=300,
-    theme="streamlit",
-    fit_columns_on_grid_load=True,
-).get("selected_rows", [])
-
-# 🧾 Safe getter
-def safe_get(row: dict, col: str, default="-"):
-    return row.get(col, default) if isinstance(row, dict) else default
-
-# ℹ️ Detalhes + Thread
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
-    r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-
-    try:
-        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
-    except Exception:
-        abertura_fmt = "-"
-
-    st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
-**Status:** {safe_get(r,'status')}
-**Solicitante:** {safe_get(r,'solicitante_nome')}
-**Responsável:** {safe_get(r,'responsavel_nome')}
-**Abertura:** {abertura_fmt}""")
-
-    btn_thread = st.button("💬 Ver Thread", key=f"btn_thread_{safe_get(r, 'id')}")
-
-    if btn_thread:
-        canal = safe_get(r, "canal_id")
-        ts = str(safe_get(r, "thread_ts"))
-        if canal and ts and ts.replace(".", "", 1).isdigit():
-            msgs = fetch_thread(canal, ts)
-            if msgs:
-                st.success(f"{len(msgs)} mensagens na thread")
-                for m in msgs:
-                    ts_msg = pd.to_datetime(float(m["ts"]), unit="s")
-                    user = get_nome_real(m.get("user", ""))
-                    txt = m.get("text", "")
-                    pin = "📌 " if m["ts"] == ts else ""
-                    bg = "#E3F2FD" if pin else "#fff"
-                    st.markdown(
-                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                        f"<strong>{pin}{user}</strong> "
-                        f"<span style='color:#555;'>_{ts_msg:%d/%m %H:%M}_</span><br>{txt}</div>",
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
-        else:
-            st.error("❌ Canal ou thread inválidos.")
-else:
-    st.info("Selecione um chamado para visualizar os detalhes.")
-# ═══════════════ Gráficos ════════════════════════════════
-st.subheader("📊 Distribuição e Fechamento")
-g1, g2 = st.columns(2)
-
-with g1:
-    fig, ax = plt.subplots(figsize=(4, 2))
-    df["tipo_ticket"].value_counts().plot.bar(ax=ax, color="#3E84F4", width=0.5)
-    ax.set_ylabel("Qtd", fontsize=8)
-    ax.set_title("Por Tipo de Ticket", fontsize=9)
-    ax.tick_params(axis="x", labelrotation=25, labelsize=7)
-    ax.tick_params(axis="y", labelsize=7)
-    for s in ax.spines.values(): s.set_visible(False)
-    st.pyplot(fig)
-
-with g2:
-    fech = df[df["data_fechamento"].notna()]
-    st.metric(
-        "🗓️ Tempo médio de fechamento",
-        f"{fech['dias_para_fechamento'].mean():.1f} dias" if not fech.empty else "-"
-    )
-    if not fech.empty:
-        fig2, ax2 = plt.subplots(figsize=(4, 2))
-        fech["dias_para_fechamento"].hist(ax=ax2, bins=6, color="#34A853")
-        ax2.set_xlabel("Dias", fontsize=8)
-        ax2.set_ylabel("Chamados", fontsize=8)
-        ax2.set_title("Dias até Fechamento", fontsize=9)
-        ax2.tick_params(axis="both", labelsize=7)
-        for s in ax2.spines.values(): s.set_visible(False)
-        st.pyplot(fig2)
-
-# ═══════════════ Alterações + Exportações ═════════════════
-st.markdown("## 🔄 Alterações (edições + reaberturas)")
-if df_alt.empty:
-    st.info("Não há alterações para o filtro atual.")
-else:
-    vis = df_alt.rename(columns={"id": "OS", "quando": "Data", "quem": "Usuário"})
-    a, b = st.columns([2, 1])
-
-    with a:
-        st.dataframe(vis, use_container_width=True)
-
-    with b:
-        top = (
-            vis["Usuário"]
-            .value_counts()
-            .head(10)
-            .rename_axis("Usuário")
-            .reset_index(name="Qtd")
-        )
-        fig3, ax3 = plt.subplots(figsize=(4, 2))
-        top.plot.barh(x="Usuário", y="Qtd", ax=ax3, color="#FF7043")
-        ax3.invert_yaxis()
-        ax3.set_xlabel("Alterações", fontsize=8)
-        ax3.set_title("Top Alteradores", fontsize=9)
-        ax3.tick_params(axis="both", labelsize=7)
-        for s in ax3.spines.values(): s.set_visible(False)
-        st.pyplot(fig3)
-
-st.subheader("📦 Exportar")
-csv_main = df.to_csv(index=False).encode()
-csv_alt  = df_alt.to_csv(index=False).encode()
-
-c_csv, c_xlsx, a_csv, a_xlsx = st.columns(4)
-
-c_csv.download_button("⬇️ Chamados CSV", csv_main, "chamados.csv", "text/csv")
-
-buf = io.BytesIO(); df.to_excel(buf, index=False, engine="xlsxwriter")
-c_xlsx.download_button(
-    "📊 Chamados XLSX",
-    buf.getvalue(),
-    "chamados.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
-
-a_csv.download_button("⬇️ Alterações CSV", csv_alt, "alteracoes.csv", "text/csv")
-
-buf2 = io.BytesIO(); df_alt.to_excel(buf2, index=False, engine="xlsxwriter")
-a_xlsx.download_button(
-    "📊 Alterações XLSX",
-    buf2.getvalue(),
-    "alteracoes.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
-
+# ═══════════════ Teste Slack isolado ANTES DE TUDO ══════════════════════
+st.subheader("🧪 Teste Isolado da API do Slack")
+if st.button("Ver Thread de Teste"):
+    canal = "C06TTKNEBHA"
+    ts = "1749246526.039919"
+    msgs = fetch_thread(canal, ts)
+    if msgs:
+        st.success(f"{len(msgs)} mensagens encontradas")
+        for m in msgs:
+            ts_msg = pd.to_datetime(float(m["ts"]), unit="s")
+            user = get_nome_real(m.get("user", ""))
+            txt = m.get("text", "")
+            st.markdown(
+                f"<div style='background:#F4F6F7;padding:8px;border-left:4px solid #3E84F4;'>"
+                f"<strong>{user}</strong> "
+                f"<span style='color:#777;'>_{ts_msg:%d/%m %H:%M}_</span><br>{txt}</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
