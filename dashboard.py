@@ -201,20 +201,24 @@ st.markdown("---")
 # ───────────── Grade + Thread integrada ─────────────
 st.subheader("📄 Chamados")
 
-# Adiciona coluna com botão "Ver Thread"
+# Clona o df para a grid
 df_grid = df.copy()
-df_grid["Ver Thread"] = df_grid.apply(lambda row: f"🔍 Ver Thread {row['id']}", axis=1)
 
-# Reorganiza colunas
-grid_cols = ["Ver Thread", "id", "tipo_ticket", "status", "solicitante_nome", "responsavel_nome", "data_abertura"]
-df_grid = df_grid.reindex(columns=grid_cols + ["canal_id", "thread_ts"])  # mantém os campos ocultos
+# Colunas da grade + campos ocultos
+grid_cols = [
+    "id", "tipo_ticket", "status",
+    "solicitante_nome", "responsavel_nome",
+    "data_abertura", "canal_id", "thread_ts"
+]
 
+df_grid = df_grid.reindex(columns=grid_cols)
+
+# Configura grade
 gb = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
 gb.configure_column("canal_id", hide=True)
 gb.configure_column("thread_ts", hide=True)
-gb.configure_column("Ver Thread", header_name="💬", width=130)
 gb.configure_selection("single")
 
 sel = AgGrid(
@@ -226,38 +230,53 @@ sel = AgGrid(
     fit_columns_on_grid_load=True,
 ).get("selected_rows", [])
 
+# 🧾 Safe getter
+def safe_get(row: dict, col: str, default="-"):
+    return row.get(col, default) if isinstance(row, dict) else default
+
+# ℹ️ Detalhes + Thread
 if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
     r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {r['id']}")
-    abertura_fmt = pd.to_datetime(r["data_abertura"]).strftime("%d/%m/%Y %H:%M") if r["data_abertura"] else "-"
-    st.write(f"""**Tipo:** {r['tipo_ticket']}
-**Status:** {r['status']}
-**Solicitante:** {r['solicitante_nome']}
-**Responsável:** {r['responsavel_nome']}
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
+
+    try:
+        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        abertura_fmt = "-"
+
+    st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
+**Status:** {safe_get(r,'status')}
+**Solicitante:** {safe_get(r,'solicitante_nome')}
+**Responsável:** {safe_get(r,'responsavel_nome')}
 **Abertura:** {abertura_fmt}""")
 
-    if st.button("💬 Ver Thread Slack"):
-        msgs = fetch_thread(r["canal_id"], str(r["thread_ts"]))
-        if msgs:
-            st.success(f"{len(msgs)} mensagens na thread")
-            for m in msgs:
-                ts = pd.to_datetime(float(m["ts"]), unit="s")
-                user = get_nome_real(m.get("user", ""))
-                txt = m.get("text", "")
-                pin = "📌 " if m["ts"] == str(r["thread_ts"]) else ""
-                bg = "#E3F2FD" if pin else "#fff"
-                st.markdown(
-                    f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                    f"<strong>{pin}{user}</strong> "
-                    f"<span style='color:#555;'>_{ts:%d/%m %H:%M}_</span><br>{txt}</div>",
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info("Nenhuma mensagem ou canal inválido.")
-else:
-    if btn_thread:
-        st.warning("Selecione um chamado antes de clicar em 'Ver Thread'.")
+    btn_thread = st.button("💬 Ver Thread", key=f"btn_thread_{safe_get(r, 'id')}")
 
+    if btn_thread:
+        canal = safe_get(r, "canal_id")
+        ts = str(safe_get(r, "thread_ts"))
+        if canal and ts and ts.replace(".", "", 1).isdigit():
+            msgs = fetch_thread(canal, ts)
+            if msgs:
+                st.success(f"{len(msgs)} mensagens na thread")
+                for m in msgs:
+                    ts_msg = pd.to_datetime(float(m["ts"]), unit="s")
+                    user = get_nome_real(m.get("user", ""))
+                    txt = m.get("text", "")
+                    pin = "📌 " if m["ts"] == ts else ""
+                    bg = "#E3F2FD" if pin else "#fff"
+                    st.markdown(
+                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
+                        f"<strong>{pin}{user}</strong> "
+                        f"<span style='color:#555;'>_{ts_msg:%d/%m %H:%M}_</span><br>{txt}</div>",
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
+        else:
+            st.error("❌ Canal ou thread inválidos.")
+else:
+    st.info("Selecione um chamado para visualizar os detalhes.")
 # ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
