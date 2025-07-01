@@ -226,7 +226,7 @@ def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
 # detalhes --------------------------------------------------------------
-if sel:
+if isinstance(sel, list) and sel:
     r = sel[0]          # único selecionado
     st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
     abertura_fmt = "-"
