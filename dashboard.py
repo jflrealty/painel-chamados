@@ -253,7 +253,9 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
 
     if btn_thread:
         canal = safe_get(r, "canal_id")
-        ts = str(safe_get(r, "thread_ts"))
+        raw_ts = safe_get(r, "thread_ts")
+        ts = str(raw_ts) if raw_ts else ""
+
         if canal and ts and ts.replace(".", "", 1).isdigit():
             msgs = fetch_thread(canal, ts)
             if msgs:
@@ -274,8 +276,6 @@ if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
                 st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
         else:
             st.error("❌ Canal ou thread inválidos.")
-else:
-    st.info("Selecione um chamado para visualizar os detalhes.")
 # ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
