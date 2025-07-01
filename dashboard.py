@@ -198,84 +198,83 @@ c5.markdown(f"<div class='card'><h3>{(df['dias_para_fechamento']>2).sum()}</h3><
 st.markdown("---")
 
 # ───────────── Grade + Thread integrada ─────────────
-st.subheader("📄 Chamados")
+st.subheader("📄 Chamados")          # <-- título sem “(clique …)”
 
-# Clona o df para a grid
-df_grid = df.copy()
-
-# Colunas da grade + campos ocultos
-grid_cols = [
-    "id", "tipo_ticket", "status",
-    "solicitante_nome", "responsavel_nome",
-    "data_abertura", "canal_id", "thread_ts"
-]
-
-df_grid = df_grid.reindex(columns=grid_cols)
-
-# Configura grade
-gb = GridOptionsBuilder.from_dataframe(df_grid)
+# grade de chamados (campos visíveis + ocultos p/ slack)
+grid_cols   = ["id", "tipo_ticket", "status",
+               "solicitante_nome", "responsavel_nome",
+               "data_abertura",   "canal_id", "thread_ts"]
+df_grid     = df.reindex(columns=grid_cols)          # preenche ausentes c/ NaN
+gb          = GridOptionsBuilder.from_dataframe(df_grid)
 gb.configure_pagination()
 gb.configure_default_column(resizable=True, filter=True, sortable=True)
-gb.configure_column("canal_id", hide=True)
+gb.configure_column("canal_id",  hide=True)          # ocultos
 gb.configure_column("thread_ts", hide=True)
-gb.configure_selection("single")
+gb.configure_selection("single")                     # seleção de 1 linha
 
 sel = AgGrid(
     df_grid,
-    gridOptions=gb.build(),
-    update_mode=GridUpdateMode.SELECTION_CHANGED,
-    height=300,
-    theme="streamlit",
-    fit_columns_on_grid_load=True,
-).get("selected_rows", [])
+    gridOptions   = gb.build(),
+    update_mode   = GridUpdateMode.SELECTION_CHANGED,
+    height        = 300,
+    theme         = "streamlit",
+    fit_columns_on_grid_load = True,
+)["selected_rows"]
 
-# 🧾 Safe getter
+# helper seguro ---------------------------------------------------------
 def safe_get(row: dict, col: str, default="-"):
     return row.get(col, default) if isinstance(row, dict) else default
 
-# ℹ️ Detalhes + Thread
-if isinstance(sel, list) and len(sel) > 0 and isinstance(sel[0], dict):
-    r = sel[0]
-    st.markdown(f"### 📝 Detalhes OS {safe_get(r, 'id')}")
-
+# detalhes --------------------------------------------------------------
+if sel:
+    r = sel[0]          # único selecionado
+    st.markdown(f"### 📝 Detalhes OS {safe_get(r,'id')}")
+    abertura_fmt = "-"
     try:
-        abertura_fmt = pd.to_datetime(safe_get(r, "data_abertura")).strftime("%d/%m/%Y %H:%M")
+        abertura_fmt = pd.to_datetime(r["data_abertura"]).strftime("%d/%m/%Y %H:%M")
     except Exception:
-        abertura_fmt = "-"
+        pass
 
-    st.write(f"""**Tipo:** {safe_get(r,'tipo_ticket')}
-**Status:** {safe_get(r,'status')}
-**Solicitante:** {safe_get(r,'solicitante_nome')}
-**Responsável:** {safe_get(r,'responsavel_nome')}
-**Abertura:** {abertura_fmt}""")
+    st.write(
+        f"""**Tipo:** {r['tipo_ticket']}  •  **Status:** {r['status']}
+**Solicitante:** {r['solicitante_nome']}
+**Responsável:** {r['responsavel_nome']}
+**Abertura:** {abertura_fmt}"""
+    )
 
-    btn_thread = st.button("💬 Ver Thread", key=f"btn_thread_{safe_get(r, 'id')}")
+# botão global ----------------------------------------------------------
+ver_thread = st.button("💬 Ver Thread Slack", disabled=not bool(sel))
 
-    if btn_thread:
-        canal = safe_get(r, "canal_id")
-        raw_ts = safe_get(r, "thread_ts")
-        ts = str(raw_ts) if raw_ts else ""
-
-        if canal and ts and ts.replace(".", "", 1).isdigit():
-            msgs = fetch_thread(canal, ts)
-            if msgs:
-                st.success(f"{len(msgs)} mensagens na thread")
+if ver_thread and sel:
+    r      = sel[0]
+    canal  = str(r.get("canal_id") or "")
+    ts     = str(r.get("thread_ts") or "")
+    if canal and ts.replace(".", "", 1).isdigit():
+        msgs = fetch_thread(canal, ts)
+        if msgs:
+            with st.expander(f"📨 Thread Slack  •  {len(msgs)} msg"):
                 for m in msgs:
-                    ts_msg = pd.to_datetime(float(m["ts"]), unit="s")
-                    user = get_nome_real(m.get("user", ""))
-                    txt = m.get("text", "")
-                    pin = "📌 " if m["ts"] == ts else ""
-                    bg = "#E3F2FD" if pin else "#fff"
+                    ts_m   = pd.to_datetime(float(m["ts"]), unit="s")
+                    author = get_nome_real(m.get("user", ""))
+                    txt    = m.get("text", "")
+                    pin    = "📌 " if m["ts"] == ts else ""
                     st.markdown(
-                        f"<div style='background:{bg};padding:6px;border-left:3px solid #2196F3;'>"
-                        f"<strong>{pin}{user}</strong> "
-                        f"<span style='color:#555;'>_{ts_msg:%d/%m %H:%M}_</span><br>{txt}</div>",
+                        f"<div style='background:#F4F6F7;padding:6px;"
+                        f"border-left:4px solid #3E84F4;'>"
+                        f"<strong>{pin}{author}</strong> "
+                        f"<span style='color:#777;'>_{ts_m:%d/%m %H:%M}_</span><br>"
+                        f"{txt}</div>",
                         unsafe_allow_html=True,
                     )
-            else:
-                st.warning("⚠️ Nenhuma mensagem encontrada ou canal inválido.")
         else:
-            st.error("❌ Canal ou thread inválidos.")
+            st.warning("⚠️ Nenhuma mensagem encontrada ou canal/TS inválido.")
+    else:
+        st.error("❌ Canal ou thread_ts vazios/fora do formato.")
+
+else:
+    st.caption("Selecione um chamado e clique em **Ver Thread** para abrir a conversa.")
+
+    
 # ═══════════════ Gráficos ════════════════════════════════
 st.subheader("📊 Distribuição e Fechamento")
 g1, g2 = st.columns(2)
