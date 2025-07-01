@@ -243,7 +243,7 @@ if isinstance(sel, list) and sel:
     )
 
 # botão global ----------------------------------------------------------
-ver_thread = st.button("💬 Ver Thread Slack", disabled=not bool(sel))
+ver_thread = st.button("💬 Ver Thread Slack", disabled=not (isinstance(sel, list) and sel))
 
 if ver_thread and sel:
     r      = sel[0]
