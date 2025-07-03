@@ -1,25 +1,25 @@
 import os
-import json
 import psycopg2
-import json
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from pathlib import Path
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Token direto das variáveis do Railway (sem .env)
+# Token direto das variáveis do Railway
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request):
     chamados = carregar_chamados_do_banco()
-    return templates.TemplateResponse("painel.html", {"request": request, "chamados": chamados})
+    return templates.TemplateResponse("painel.html", {
+        "request": request,
+        "chamados": chamados
+    })
 
 @app.post("/thread", response_class=HTMLResponse)
 async def show_thread(
@@ -54,7 +54,8 @@ async def show_thread(
         "canal": canal_id,
         "thread": thread_ts
     })
-    def carregar_chamados_do_banco():
+
+def carregar_chamados_do_banco():
     DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
     if not DATABASE_URL:
         return []
