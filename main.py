@@ -16,18 +16,10 @@ templates = Jinja2Templates(directory="templates")
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request):
-    chamados = []
-    path = Path("chamados.json")
-    if path.exists():
-        with open(path, "r") as f:
-            chamados = json.load(f)
-
-    return templates.TemplateResponse("painel.html", {
-        "request": request,
-        "chamados": chamados
-    })
+    chamados = carregar_chamados_do_banco()
+    return templates.TemplateResponse("painel.html", {"request": request, "chamados": chamados})
 
 @app.post("/thread", response_class=HTMLResponse)
 async def show_thread(
