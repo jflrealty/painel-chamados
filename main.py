@@ -58,7 +58,13 @@ async def show_thread(
 
 def carregar_chamados_do_banco():
     DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
+
+    # DEBUG: verificar se a variável está mesmo carregada
+    print("🔍 DATABASE_PUBLIC_URL =", DATABASE_URL)
+
+    # Fallback defensivo
     if not DATABASE_URL:
+        print("❌ ERRO: Variável de ambiente DATABASE_PUBLIC_URL não está definida.")
         return []
 
     try:
@@ -77,7 +83,7 @@ def carregar_chamados_do_banco():
                 "id": r[0],
                 "tipo_ticket": r[1],
                 "status": r[2],
-                "responsavel": get_real_name(r[3]),  # ⬅️ Nome real do responsável
+                "responsavel": get_real_name(r[3]),
                 "canal_id": r[4],
                 "thread_ts": r[5]
             })
@@ -85,5 +91,5 @@ def carregar_chamados_do_banco():
         conn.close()
         return chamados
     except Exception as e:
-        print(f"Erro ao conectar ao banco: {e}")
+        print(f"❌ ERRO ao conectar ao banco: {e}")
         return []
