@@ -1,0 +1,10 @@
+[
+  {
+    "id": 101,
+    "tipo_ticket": "Dúvida",
+    "status": "aberto",
+    "responsavel": "lucas",
+    "canal_id": "C06TTKNEBHA",
+    "thread_ts": "1749246526.039919"
+  }
+]
