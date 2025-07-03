@@ -1,27 +1,44 @@
 import os
+import json
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from dotenv import load_dotenv
-
-load_dotenv()
+from pathlib import Path
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+# Token direto das variáveis do Railway (sem .env)
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 @app.get("/", response_class=HTMLResponse)
-async def form(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request})
+async def painel(request: Request):
+    chamados = []
+    path = Path("chamados.json")
+    if path.exists():
+        with open(path, "r") as f:
+            chamados = json.load(f)
+
+    return templates.TemplateResponse("painel.html", {
+        "request": request,
+        "chamados": chamados
+    })
 
 @app.post("/thread", response_class=HTMLResponse)
-async def show_thread(request: Request, canal_id: str = Form(...), thread_ts: str = Form(...)):
+async def show_thread(
+    request: Request,
+    canal_id: str = Form(...),
+    thread_ts: str = Form(...)
+):
     try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
+        resp = slack_client.conversations_replies(
+            channel=canal_id,
+            ts=thread_ts,
+            limit=200
+        )
         messages = [
             {
                 "user": m.get("user", "desconhecido"),
@@ -32,9 +49,14 @@ async def show_thread(request: Request, canal_id: str = Form(...), thread_ts: st
         ]
     except SlackApiError as e:
         return templates.TemplateResponse("thread.html", {
-            "request": request, "messages": [], "error": str(e)
+            "request": request,
+            "messages": [],
+            "error": str(e)
         })
 
     return templates.TemplateResponse("thread.html", {
-        "request": request, "messages": messages, "canal": canal_id, "thread": thread_ts
+        "request": request,
+        "messages": messages,
+        "canal": canal_id,
+        "thread": thread_ts
     })
