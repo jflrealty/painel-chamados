@@ -64,12 +64,10 @@ async def show_thread(
         "thread": thread_ts
     })
 
-def carregar_chamados_do_banco():
-    DATABASE_URL = os.getenv("DATABASE_PUBLIC_URL")
-    print(f"🔍 DATABASE_PUBLIC_URL = {repr(DATABASE_URL)}")
+def carregar_chamados_do_banco(status=None, responsavel=None, data_ini=None, data_fim=None):
+    DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
 
     if not DATABASE_URL:
-        print("❌ ERRO: DATABASE_PUBLIC_URL não está definida.")
         return []
 
     if DATABASE_URL.startswith("postgresql://"):
@@ -78,12 +76,30 @@ def carregar_chamados_do_banco():
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
-        cur.execute("""
-            SELECT id, tipo_ticket, status, responsavel, canal_id, thread_ts
+
+        query = """
+            SELECT id, tipo_ticket, status, responsavel, canal_id, thread_ts, data_abertura, data_fechamento, sla_status
             FROM ordens_servico
-            ORDER BY id DESC
-            LIMIT 100
-        """)
+            WHERE 1=1
+        """
+        params = []
+
+        if status:
+            query += " AND status = %s"
+            params.append(status)
+        if responsavel:
+            query += " AND responsavel = %s"
+            params.append(responsavel)
+        if data_ini:
+            query += " AND data_abertura >= %s"
+            params.append(data_ini)
+        if data_fim:
+            query += " AND data_abertura <= %s"
+            params.append(data_fim)
+
+        query += " ORDER BY id DESC LIMIT 100"
+
+        cur.execute(query, tuple(params))
         rows = cur.fetchall()
         chamados = []
         for r in rows:
@@ -93,7 +109,10 @@ def carregar_chamados_do_banco():
                 "status": r[2],
                 "responsavel": get_real_name(r[3]),
                 "canal_id": r[4],
-                "thread_ts": r[5]
+                "thread_ts": r[5],
+                "data_abertura": r[6],
+                "data_fechamento": r[7],
+                "sla_status": r[8]
             })
         cur.close()
         conn.close()
