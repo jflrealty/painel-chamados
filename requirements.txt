@@ -1,7 +1,6 @@
 fastapi
 uvicorn
-slack_sdk
-python-dotenv
 jinja2
 python-multipart
+slack-sdk
 psycopg2-binary
