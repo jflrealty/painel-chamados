@@ -5,12 +5,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from utils.slack_helpers import get_real_name  # ⬅️ IMPORTAÇÃO DO NOME REAL
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Token direto das variáveis do Railway
-SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+# Slack Client a partir da variável do Railway
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 @app.get("/painel", response_class=HTMLResponse)
@@ -35,7 +36,7 @@ async def show_thread(
         )
         messages = [
             {
-                "user": m.get("user", "desconhecido"),
+                "user": get_real_name(m.get("user", "desconhecido")),  # ⬅️ Nome real
                 "text": m.get("text", ""),
                 "ts": m.get("ts")
             }
@@ -76,7 +77,7 @@ def carregar_chamados_do_banco():
                 "id": r[0],
                 "tipo_ticket": r[1],
                 "status": r[2],
-                "responsavel": r[3],
+                "responsavel": get_real_name(r[3]),  # ⬅️ Nome real do responsável
                 "canal_id": r[4],
                 "thread_ts": r[5]
             })
