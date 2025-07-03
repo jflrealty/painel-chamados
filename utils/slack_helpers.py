@@ -1,6 +1,18 @@
-{\rtf1\ansi\ansicpg1252\cocoartf2822
-\cocoatextscaling0\cocoaplatform0{\fonttbl}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
-}
+from functools import lru_cache
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+import os
+
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+client = WebClient(token=SLACK_BOT_TOKEN)
+
+@lru_cache(maxsize=1024)
+def get_real_name(user_id: str) -> str:
+    """Busca o nome real de um usuário do Slack com cache local."""
+    if not user_id:
+        return "–"
+    try:
+        info = client.users_info(user=user_id)
+        return info["user"].get("real_name", user_id)
+    except SlackApiError:
+        return user_id
