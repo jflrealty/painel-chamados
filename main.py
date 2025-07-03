@@ -64,7 +64,7 @@ def carregar_chamados_do_banco():
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, tipo_ticket, status, responsavel_nome, canal_id, thread_ts
+            SELECT id, tipo_ticket, status, responsavel, canal_id, thread_ts
             FROM ordens_servico
             ORDER BY id DESC
             LIMIT 100
