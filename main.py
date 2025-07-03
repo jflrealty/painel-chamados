@@ -59,13 +59,14 @@ async def show_thread(
 def carregar_chamados_do_banco():
     DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
 
-    # DEBUG: verificar se a variável está mesmo carregada
     print("🔍 DATABASE_PUBLIC_URL =", DATABASE_URL)
 
-    # Fallback defensivo
     if not DATABASE_URL:
-        print("❌ ERRO: Variável de ambiente DATABASE_PUBLIC_URL não está definida.")
+        print("❌ ERRO: DATABASE_PUBLIC_URL não está definida.")
         return []
+
+    if DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgres://", 1)
 
     try:
         conn = psycopg2.connect(DATABASE_URL)
