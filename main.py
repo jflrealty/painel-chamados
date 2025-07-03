@@ -54,3 +54,34 @@ async def show_thread(
         "canal": canal_id,
         "thread": thread_ts
     })
+    def carregar_chamados_do_banco():
+    DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
+    if not DATABASE_URL:
+        return []
+
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, tipo_ticket, status, responsavel_nome, canal_id, thread_ts
+            FROM ordens_servico
+            ORDER BY id DESC
+            LIMIT 100
+        """)
+        rows = cur.fetchall()
+        chamados = []
+        for r in rows:
+            chamados.append({
+                "id": r[0],
+                "tipo_ticket": r[1],
+                "status": r[2],
+                "responsavel": r[3],
+                "canal_id": r[4],
+                "thread_ts": r[5]
+            })
+        cur.close()
+        conn.close()
+        return chamados
+    except Exception as e:
+        print(f"Erro ao conectar ao banco: {e}")
+        return []
