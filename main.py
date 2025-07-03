@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from utils.slack_helpers import get_real_name
+from datetime import datetime
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -113,8 +114,8 @@ def carregar_chamados_do_banco(status=None, responsavel=None, data_ini=None, dat
                 "responsavel": get_real_name(r[3]),
                 "canal_id": r[4],
                 "thread_ts": r[5],
-                "data_abertura": r[6],
-                "data_fechamento": r[7],
+                "data_abertura": formatar_data_br(r[6]),
+                "data_fechamento": formatar_data_br(r[7]),
                 "sla_status": r[8]
             })
         cur.close()
@@ -136,3 +137,13 @@ def calcular_metricas(chamados):
         "finalizados": finalizados,
         "fora_sla": fora_sla
     }
+
+def formatar_data_br(dt):
+    if not dt:
+        return "-"
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return dt
+    return dt.strftime("%d/%m/%Y às %Hh%M")
