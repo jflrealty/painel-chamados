@@ -1,15 +1,15 @@
+import os
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI()
-templates = Jinja2Templates(directory="web/templates")
+templates = Jinja2Templates(directory="templates")
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
@@ -31,6 +31,10 @@ async def show_thread(request: Request, canal_id: str = Form(...), thread_ts: st
             for m in resp.get("messages", [])
         ]
     except SlackApiError as e:
-        return templates.TemplateResponse("thread.html", {"request": request, "messages": [], "error": str(e)})
+        return templates.TemplateResponse("thread.html", {
+            "request": request, "messages": [], "error": str(e)
+        })
 
-    return templates.TemplateResponse("thread.html", {"request": request, "messages": messages, "canal": canal_id, "ts": thread_ts})
+    return templates.TemplateResponse("thread.html", {
+        "request": request, "messages": messages, "canal": canal_id, "thread": thread_ts
+    })
