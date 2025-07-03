@@ -1,18 +1,23 @@
-from functools import lru_cache
+import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-import os
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-client = WebClient(token=SLACK_BOT_TOKEN)
+slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
-@lru_cache(maxsize=1024)
 def get_real_name(user_id: str) -> str:
-    """Busca o nome real de um usuário do Slack com cache local."""
-    if not user_id:
-        return "–"
-    try:
-        info = client.users_info(user=user_id)
-        return info["user"].get("real_name", user_id)
-    except SlackApiError:
-        return user_id
+    if user_id.startswith("S"):  # Provável user group
+        try:
+            resp = slack_client.usergroups_list()
+            groups = resp.get("usergroups", [])
+            for g in groups:
+                if g.get("id") == user_id:
+                    return g.get("name") or user_id
+        except SlackApiError:
+            return user_id
+    else:  # Usuário normal
+        try:
+            user_info = slack_client.users_info(user=user_id)
+            return user_info["user"]["real_name"]
+        except SlackApiError:
+            return user_id
