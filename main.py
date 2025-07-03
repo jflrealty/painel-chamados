@@ -57,9 +57,8 @@ async def show_thread(
     })
 
 def carregar_chamados_do_banco():
-    DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
-
-    print("🔍 DATABASE_PUBLIC_URL =", DATABASE_URL)
+    DATABASE_URL = os.getenv("DATABASE_PUBLIC_URL")
+    print(f"🔍 DATABASE_PUBLIC_URL = {repr(DATABASE_URL)}")
 
     if not DATABASE_URL:
         print("❌ ERRO: DATABASE_PUBLIC_URL não está definida.")
