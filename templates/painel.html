@@ -1,7 +1,126 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>Painel de Chamados</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; padding: 20px; }
+    .card-metric { min-width: 180px; }
+    table td, table th { vertical-align: middle; }
+    .modal { display: none; position: fixed; top: 10%; left: 10%; width: 80%; height: 80%; background: white; padding: 20px; border: 2px solid #444; overflow: auto; z-index: 1000; }
+    .modal button { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <h2 class="mb-4">Painel de Chamados</h2>
+
+  <!-- Cards de Métricas -->
+  <div class="d-flex gap-4 mb-4 flex-wrap">
+    <div class="card card-metric shadow-sm">
+      <div class="card-body text-center">
+        <h5 class="card-title">Total</h5>
+        <p class="fs-4">{{ totais.total }}</p>
+      </div>
+    </div>
+    <div class="card card-metric shadow-sm">
+      <div class="card-body text-center">
+        <h5 class="card-title">Em Atendimento</h5>
+        <p class="fs-4 text-warning">{{ totais.em_atendimento }}</p>
+      </div>
+    </div>
+    <div class="card card-metric shadow-sm">
+      <div class="card-body text-center">
+        <h5 class="card-title">Finalizados</h5>
+        <p class="fs-4 text-success">{{ totais.finalizados }}</p>
+      </div>
+    </div>
+    <div class="card card-metric shadow-sm">
+      <div class="card-body text-center">
+        <h5 class="card-title">Fora do SLA</h5>
+        <p class="fs-4 text-danger">{{ totais.fora_sla }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" action="/painel" class="row g-3 mb-4">
+    <div class="col-md-3">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        <option value="">Todos</option>
+        <option value="Aberto">Aberto</option>
+        <option value="Em Atendimento">Em Atendimento</option>
+        <option value="Finalizado">Finalizado</option>
+        <option value="Cancelado">Cancelado</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Responsável (ID Slack)</label>
+      <input name="responsavel" class="form-control" placeholder="U01...">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Data Início</label>
+      <input type="date" name="data_ini" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Data Fim</label>
+      <input type="date" name="data_fim" class="form-control">
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button class="btn btn-primary w-100">Filtrar</button>
+    </div>
+  </form>
+
+  <!-- Tabela -->
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped align-middle bg-white shadow-sm">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Tipo</th>
+          <th>Status</th>
+          <th>Responsável</th>
+          <th>Abertura</th>
+          <th>Encerramento</th>
+          <th>SLA</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ch in chamados %}
+        <tr>
+          <td>{{ ch.id }}</td>
+          <td>{{ ch.tipo_ticket }}</td>
+          <td>{{ ch.status }}</td>
+          <td>{{ ch.responsavel }}</td>
+          <td>{{ ch.data_abertura or '' }}</td>
+          <td>{{ ch.data_fechamento or '' }}</td>
+          <td>
+            {% if ch.sla_status == 'Dentro do SLA' %}
+              <span class="badge bg-success">✔</span>
+            {% elif ch.sla_status == 'Fora do SLA' %}
+              <span class="badge bg-danger">✘</span>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="verThread('{{ ch.canal_id }}', '{{ ch.thread_ts }}')">Ver Thread</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Thread -->
+  <div id="modal" class="modal">
+    <button class="btn btn-secondary" onclick="fecharModal()">Fechar</button>
+    <div id="modal-content"></div>
+  </div>
+
   <script>
     async function verThread(canal, ts) {
       const form = new FormData();
@@ -14,71 +133,13 @@
       });
 
       const html = await response.text();
-      const modalContent = document.getElementById("modal-content");
-      modalContent.innerHTML = html;
-
-      const modal = document.getElementById("modal");
-      modal.style.display = "block";
+      document.getElementById("modal-content").innerHTML = html;
+      document.getElementById("modal").style.display = "block";
     }
 
     function fecharModal() {
       document.getElementById("modal").style.display = "none";
     }
   </script>
-  <style>
-    body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-    th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-    th { background: #eee; }
-    .modal {
-      display: none; position: fixed; top: 10%; left: 10%;
-      width: 80%; height: 80%; background: white;
-      padding: 10px 20px; border: 2px solid #444; overflow: auto;
-      box-shadow: 0 0 10px rgba(0,0,0,0.4); z-index: 1000;
-    }
-    .status-aberto { color: red; font-weight: bold; }
-    .status-em { color: orange; font-weight: bold; }
-    .status-encerrado { color: green; font-weight: bold; }
-    .fechar-btn {
-      background: #444; color: white; padding: 6px 12px; border: none;
-      cursor: pointer; float: right; margin-bottom: 10px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Painel de Chamados</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th><th>Tipo</th><th>Status</th><th>Responsável</th><th>Ação</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for ch in chamados %}
-      <tr>
-        <td>{{ ch.id }}</td>
-        <td>{{ ch.tipo_ticket }}</td>
-        <td>
-          {% if ch.status == "aberto" %}
-            <span class="status-aberto">Aberto</span>
-          {% elif ch.status == "em atendimento" %}
-            <span class="status-em">Em Atendimento</span>
-          {% elif ch.status == "encerrado" %}
-            <span class="status-encerrado">Encerrado</span>
-          {% else %}
-            {{ ch.status }}
-          {% endif %}
-        </td>
-        <td>{{ ch.responsavel }}</td>
-        <td><button onclick="verThread('{{ ch.canal_id }}', '{{ ch.thread_ts }}')">Ver Thread</button></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <div id="modal" class="modal">
-    <button class="fechar-btn" onclick="fecharModal()">Fechar</button>
-    <div id="modal-content"></div>
-  </div>
 </body>
 </html>
