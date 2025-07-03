@@ -6,6 +6,9 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 def get_real_name(user_id: str) -> str:
+    if not user_id:
+        return "(sem responsável)"
+
     if user_id.startswith("S"):  # Provável user group
         try:
             resp = slack_client.usergroups_list()
