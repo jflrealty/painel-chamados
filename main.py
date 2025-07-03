@@ -120,3 +120,16 @@ def carregar_chamados_do_banco(status=None, responsavel=None, data_ini=None, dat
     except Exception as e:
         print(f"❌ ERRO ao conectar ao banco: {e}")
         return []
+
+def calcular_metricas(chamados):
+    total = len(chamados)
+    em_atendimento = len([c for c in chamados if c["status"] == "Em Atendimento"])
+    finalizados = len([c for c in chamados if c["status"] == "Finalizado"])
+    fora_sla = len([c for c in chamados if c["sla_status"] == "Fora do SLA"])
+
+    return {
+        "total": total,
+        "em_atendimento": em_atendimento,
+        "finalizados": finalizados,
+        "fora_sla": fora_sla
+    }
