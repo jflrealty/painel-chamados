@@ -3,11 +3,14 @@ import psycopg2
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from utils.slack_helpers import get_real_name  # ⬅️ IMPORTAÇÃO DO NOME REAL
+from utils.slack_helpers import get_real_name
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 templates = Jinja2Templates(directory="templates")
 
 # Slack Client a partir da variável do Railway
