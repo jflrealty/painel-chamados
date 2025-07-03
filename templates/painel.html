@@ -14,8 +14,10 @@
       });
 
       const html = await response.text();
+      const modalContent = document.getElementById("modal-content");
+      modalContent.innerHTML = html;
+
       const modal = document.getElementById("modal");
-      modal.innerHTML = html;
       modal.style.display = "block";
     }
 
@@ -24,10 +26,23 @@
     }
   </script>
   <style>
-    body { font-family: sans-serif; background: #f4f4f4; }
-    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px }
+    body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
     th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-    .modal { display: none; position: fixed; top: 10%; left: 10%; width: 80%; height: 80%; background: white; padding: 20px; border: 2px solid #444; overflow: auto; }
+    th { background: #eee; }
+    .modal {
+      display: none; position: fixed; top: 10%; left: 10%;
+      width: 80%; height: 80%; background: white;
+      padding: 10px 20px; border: 2px solid #444; overflow: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.4); z-index: 1000;
+    }
+    .status-aberto { color: red; font-weight: bold; }
+    .status-em { color: orange; font-weight: bold; }
+    .status-encerrado { color: green; font-weight: bold; }
+    .fechar-btn {
+      background: #444; color: white; padding: 6px 12px; border: none;
+      cursor: pointer; float: right; margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -43,7 +58,17 @@
       <tr>
         <td>{{ ch.id }}</td>
         <td>{{ ch.tipo_ticket }}</td>
-        <td>{{ ch.status }}</td>
+        <td>
+          {% if ch.status == "aberto" %}
+            <span class="status-aberto">Aberto</span>
+          {% elif ch.status == "em atendimento" %}
+            <span class="status-em">Em Atendimento</span>
+          {% elif ch.status == "encerrado" %}
+            <span class="status-encerrado">Encerrado</span>
+          {% else %}
+            {{ ch.status }}
+          {% endif %}
+        </td>
         <td>{{ ch.responsavel }}</td>
         <td><button onclick="verThread('{{ ch.canal_id }}', '{{ ch.thread_ts }}')">Ver Thread</button></td>
       </tr>
@@ -52,7 +77,8 @@
   </table>
 
   <div id="modal" class="modal">
-    <button onclick="fecharModal()">Fechar</button>
+    <button class="fechar-btn" onclick="fecharModal()">Fechar</button>
+    <div id="modal-content"></div>
   </div>
 </body>
 </html>
