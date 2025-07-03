@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Painel de Chamados</title>
+  <script>
+    async function verThread(canal, ts) {
+      const form = new FormData();
+      form.append("canal_id", canal);
+      form.append("thread_ts", ts);
+
+      const response = await fetch("/thread", {
+        method: "POST",
+        body: form,
+      });
+
+      const html = await response.text();
+      const modal = document.getElementById("modal");
+      modal.innerHTML = html;
+      modal.style.display = "block";
+    }
+
+    function fecharModal() {
+      document.getElementById("modal").style.display = "none";
+    }
+  </script>
+  <style>
+    body { font-family: sans-serif; background: #f4f4f4; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px }
+    th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+    .modal { display: none; position: fixed; top: 10%; left: 10%; width: 80%; height: 80%; background: white; padding: 20px; border: 2px solid #444; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h2>Painel de Chamados</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Tipo</th><th>Status</th><th>Responsável</th><th>Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ch in chamados %}
+      <tr>
+        <td>{{ ch.id }}</td>
+        <td>{{ ch.tipo_ticket }}</td>
+        <td>{{ ch.status }}</td>
+        <td>{{ ch.responsavel }}</td>
+        <td><button onclick="verThread('{{ ch.canal_id }}', '{{ ch.thread_ts }}')">Ver Thread</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div id="modal" class="modal">
+    <button onclick="fecharModal()">Fechar</button>
+  </div>
+</body>
+</html>
