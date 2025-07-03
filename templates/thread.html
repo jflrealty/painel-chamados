@@ -1,1 +1,15 @@
-
+<html>
+<body>
+  <h2>Mensagens da Thread</h2>
+  {% if error %}
+    <p style="color:red;">Erro: {{ error }}</p>
+  {% endif %}
+  {% for m in messages %}
+    <p><strong>{{ m.user }}</strong>: {{ m.text }}</p>
+  {% endfor %}
+  <br>
+  <a href="https://app.slack.com/client/{{ canal }}/thread/{{ canal }}-{{ thread }}" target="_blank">Ver no Slack</a>
+  <br><br>
+  <a href="/">Voltar</a>
+</body>
+</html>
