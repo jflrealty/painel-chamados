@@ -15,11 +15,19 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
 
 @app.get("/painel", response_class=HTMLResponse)
-async def painel(request: Request):
-    chamados = carregar_chamados_do_banco()
+async def painel(
+    request: Request,
+    status: str = None,
+    responsavel: str = None,
+    data_ini: str = None,
+    data_fim: str = None
+):
+    chamados = carregar_chamados_do_banco(status, responsavel, data_ini, data_fim)
+    totais = calcular_metricas(chamados)
     return templates.TemplateResponse("painel.html", {
         "request": request,
-        "chamados": chamados
+        "chamados": chamados,
+        "totais": totais
     })
 
 @app.post("/thread", response_class=HTMLResponse)
