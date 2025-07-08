@@ -49,17 +49,22 @@ async def painel(
     )
     metricas = calcular_metricas(chamados_full)
 
-    # paginação ---------------------------------------------------------
-    PER_PAGE       = 50
-    total          = len(chamados_full)
-    paginas_totais = max(1, math.ceil(total / PER_PAGE))
-    page           = max(1, min(page, paginas_totais))
-    ini, fim       = (page - 1) * PER_PAGE, page * PER_PAGE
-    chamados       = chamados_full[ini:fim]
+   # paginação ----------------------------------------------
+PER_PAGE = 20
+total = len(carregar_chamados(
+    status, responsavel, data_ini, data_fim,
+    capturado, mudou_tipo, sla
+))
+paginas_totais = max(1, math.ceil(total / PER_PAGE))
+page = max(1, min(page, paginas_totais))
+ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
 
-    # selects -----------------------------------------------------------
-    responsaveis = sorted({c["responsavel"] for c in chamados_full if c["responsavel"]})
-    capturadores = sorted({c["capturado_por"] for c in chamados_full if c["capturado_por"] != "<não capturado>"})
+# dados da página atual — já com LIMIT/OFFSET no SQL
+chamados = carregar_chamados(
+    status, responsavel, data_ini, data_fim,
+    capturado, mudou_tipo, sla,
+    limit=PER_PAGE, offset=ini
+)
 
     # query-string p/ paginação ----------------------------------------
     filtros_dict = {
