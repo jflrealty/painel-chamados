@@ -161,35 +161,44 @@
     </nav>
   {% endif %}
 
-  <!-- Modal Thread -->
+   <!-- Modal Thread -->
   <div id="modal" class="modal-thread">
-    <button class="btn btn-secondary mb-2" onclick="document.getElementById('modal').style.display='none'">Fechar</button>
+    <button class="btn btn-secondary mb-2"
+            onclick="document.getElementById('modal').style.display='none'">
+      Fechar
+    </button>
     <div id="modal-content"></div>
   </div>
 
+  <!-- Bootstrap JS (dropdown) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
+    // abre a thread Slack
     async function verThread(canal, ts){
-      const fd = new FormData(); fd.append("canal_id", canal); fd.append("thread_ts", ts);
+      const fd = new FormData();
+      fd.append("canal_id", canal);
+      fd.append("thread_ts", ts);
+
       const html = await (await fetch("/thread", {method:"POST", body:fd})).text();
       document.getElementById("modal-content").innerHTML = html;
       document.getElementById("modal").style.display = "block";
     }
 
+    // exporta CSV / XLSX
     function exportarChamados(tipo){
-      const form = document.querySelector("form");
-      const formData = new FormData(form);
-
-      const params = new URLSearchParams();
-      for (const [key, value] of formData.entries()) {
-        if (value) params.append(key, value);
+      // 1) string pronta vinda do back-end
+      let qs = "{{ filtros_as_query }}";
+      // 2) se por acaso vier vazia, gera a partir do form
+      if (!qs){
+        const data = new FormData(document.querySelector("form"));
+        const p    = new URLSearchParams();
+        for (const [k,v] of data.entries()) if (v) p.append(k,v);
+        qs = p.toString();
       }
-      params.append("tipo", tipo);
-
-      const url = "/exportar?" + params.toString();
-      console.log("Exportando para:", url);
-      window.open(url, "_blank");
+      const url = "/exportar?" + qs + (qs ? "&" : "") + "tipo=" + tipo;
+      window.open(url, "_blank");              // nova guia / download imediato
     }
   </script>
-
 </body>
 </html>
