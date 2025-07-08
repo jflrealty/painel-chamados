@@ -48,21 +48,27 @@ async def painel(
         }
     )
 
-@app.post("/thread", response_class=HTMLResponse)
-async def thread(request: Request, canal_id: str = Form(...), thread_ts: str = Form(...)):
+@app.post("/thread")
+async def thread(request: Request):
+    form = await request.form()
+    canal_id = form["canal_id"]
+    thread_ts = form["thread_ts"]
+
+    mensagens = []
     try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-        msgs = [
-            {
-                "user": get_real_name(m.get("user") or ""),
-                "text": m.get("text", ""),
-                "ts": dt.datetime.fromtimestamp(float(m["ts"]), tz=dt.timezone.utc).astimezone(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y às %Hh%M")
-            }
-            for m in resp.get("messages", [])
-        ]
+        print(f"🔎 Buscando thread: canal={canal_id}, ts={thread_ts}")
+        thread = slack_client.conversations_replies(channel=canal_id, ts=thread_ts)
+        mensagens = thread.get("messages", [])
+        print(f"✅ {len(mensagens)} mensagens encontradas")
     except SlackApiError as e:
-        msgs, canal_id = [], f"Erro Slack: {e.response['error']}"
-    return templates.TemplateResponse("thread.html", {"request": request, "msgs": msgs})
+        print(f"❌ Erro Slack API: {e.response['error']}")
+    except Exception as e:
+        print(f"❌ Erro inesperado: {e}")
+
+    return templates.TemplateResponse("thread.html", {
+        "request": request,
+        "mensagens": mensagens
+    })
 
 # ─────────── Helpers ───────────
 def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=None, capturado=None, mudou_tipo=None):
