@@ -69,12 +69,12 @@ async def painel(
     responsaveis = listar_responsaveis(**base_filtros)
     capturadores = listar_capturadores(**base_filtros)
 
-    # ── métricas globais (evita conflito de argumentos) ─────────
+    # ── métricas globais ───────────────────────────────────────────
     filtros_para_metricas = {k: v for k, v in base_filtros.items()
-                             if k not in ("status", "sla", "mudou_tipo")}
+                         if k not in ("status", "sla", "mudou_tipo")}
 
     metricas = {
-        "total":          total,
+        "total": contar_chamados(**base_filtros),
         "em_atendimento": contar_chamados(status="Em Atendimento", **filtros_para_metricas),
         "finalizados":    contar_chamados(status="Finalizado", **filtros_para_metricas),
         "fora_sla":       contar_chamados(sla="fora", **filtros_para_metricas),
