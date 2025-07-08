@@ -19,8 +19,14 @@
 
 {% if mensagens %}
   {% for m in mensagens %}
-    <div class="msg {% if m.orig %}orig{% endif %}">
-      <div class="user">{{ m.user }}</div>
+      <div class="msg {% if m.orig %}orig{% endif %}">
+      <div class="user">
+  {% if m.user == "*<não capturado>*" %}
+    <em>&lt;não capturado&gt;</em>
+  {% else %}
+    {{ m.user }}
+  {% endif %}
+    </div>
       <div class="text">{{ m.text }}</div>
       <div class="timestamp">{{ m.ts }}</div>
     </div>
