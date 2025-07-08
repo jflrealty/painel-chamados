@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient, errors as slack_err
 
-from utils.slack_helpers import get_real_name   # função já existente
+from utils.slack_helpers import get_real_name, formatar_mensagem
 
 # ───────────────  FASTAPI & TEMPLATES  ───────────────
 app = FastAPI()
