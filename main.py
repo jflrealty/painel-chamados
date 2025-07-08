@@ -79,13 +79,13 @@ async def painel(
     responsaveis = listar_responsaveis(**base_filtros)
     capturadores = listar_capturadores(**base_filtros)
 
-    filtros_sem_status = {k: v for k, v in base_filtros.items() if k != "status"}
+    filtros_base = {k: v for k, v in base_filtros.items() if k not in ["status", "sla", "mudou_tipo"]}
     metricas = {
         "total": total,
-        "em_atendimento": contar_chamados(status="Em Atendimento", **filtros_sem_status),
-        "finalizados":    contar_chamados(status="Finalizado", **filtros_sem_status),
-        "fora_sla":       contar_chamados(sla="fora", **filtros_sem_status),
-        "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **filtros_sem_status),
+        "em_atendimento": contar_chamados(status="Em Atendimento", **filtros_base),
+        "finalizados":    contar_chamados(status="Finalizado", **filtros_base),
+        "fora_sla":       contar_chamados(sla="fora", **filtros_base),
+        "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **filtros_base),
     }
 
     return templates.TemplateResponse(
