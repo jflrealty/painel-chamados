@@ -82,6 +82,7 @@ async def painel(
             "filtros":        filtros_dict,
             "responsaveis":   responsaveis,
             "capturadores":   capturadores,
+            "filtros_as_query": filtros_qs,
         },
     )
 
