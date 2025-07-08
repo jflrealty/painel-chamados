@@ -23,37 +23,45 @@ slack_client     = WebClient(token=SLACK_BOT_TOKEN)
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(
     request: Request,
-    page:        int  | None = 1,            # ← paginação
+    page:        int  | None = 1,
     status:      str | None = None,
     responsavel: str | None = None,
     data_ini:    str | None = None,
     data_fim:    str | None = None,
     capturado:   str | None = None,
     mudou_tipo:  str | None = None,
-    sla:         str | None = None           # “fora” vindo do card
+    sla:         str | None = None
 ):
-    # ---- consulta completa (sem corte) ----
+    # ← flags extras dos cards clicáveis
+    so_total = request.query_params.get("so_total")
+    so_ema   = request.query_params.get("so_ema")
+    so_fin   = request.query_params.get("so_fin")
+    so_sla   = request.query_params.get("so_sla")
+    so_mud   = request.query_params.get("so_mud")
+
+    # se clicou em algum card, aplicamos filtro automático
+    if so_ema:  status = "Em Atendimento"
+    if so_fin:  status = "Finalizado"
+    if so_sla:  sla    = "fora"
+    if so_mud:  mudou_tipo = "sim"
+
     chamados_full = carregar_chamados_do_banco(
         status, responsavel, data_ini, data_fim, capturado, mudou_tipo, sla
     )
 
-    # ---- métricas (antes do corte) ----
     metricas = calcular_metricas(chamados_full)
 
-    # ---- paginação ----------------------------------------------------
     PER_PAGE = 50
     total    = len(chamados_full)
     total_pg = max(1, math.ceil(total / PER_PAGE))
-    page     = max(1, min(page, total_pg))                 # clamp
+    page     = max(1, min(page, total_pg))
     ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
     chamados = chamados_full[ini:fim]
 
-    # ---- selects ------------------------------------------------------
     todos_resp  = sorted({c["responsavel"]    for c in chamados_full if c["responsavel"]})
     todos_capts = sorted({c["capturado_por"]  for c in chamados_full
                           if c["capturado_por"] and c["capturado_por"] != "<não capturado>"})
 
-    # ---- rebuild query-string (sem page) ----
     filtros = {
         "status": status, "responsavel": responsavel,
         "data_ini": data_ini, "data_fim": data_fim,
@@ -68,9 +76,9 @@ async def painel(
             "request": request,
             "chamados": chamados,
             "metricas": metricas,
-            "page": page,
-            "total_pages": total_pg,
-            "filtros_as_query": filtros_qs,
+            "pagina_atual": page,
+            "paginas_totais": total_pg,
+            "url_paginacao": f"/painel?{filtros_qs}",
             "filtros": filtros,
             "responsaveis": todos_resp,
             "capturadores": todos_capts
