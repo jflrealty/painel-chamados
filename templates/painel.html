@@ -14,6 +14,18 @@
 </head>
 <body>
   <div class="mb-3"><a class="btn btn-outline-dark" href="/painel">🏠 Home</a></div>
+  <!-- Exportar -->
+<div class="dropdown d-inline-block ms-2">
+  <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown">
+    Exportar
+  </button>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item"
+           href="/exportar?{{ filtros_as_query }}&tipo=xlsx">Excel (.xlsx)</a></li>
+    <li><a class="dropdown-item"
+           href="/exportar?{{ filtros_as_query }}&tipo=csv">CSV (;)</a></li>
+  </ul>
+</div>
   <h2 class="mb-4">Painel de Chamados</h2>
 
   <!-- Métricas -->
