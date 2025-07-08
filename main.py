@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from utils.slack_helpers import get_real_name
+from utils.slack_helpers import get_real_name, formatar_texto_slack
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -49,27 +49,35 @@ async def painel(
         }
     )
 
-@app.post("/thread")
+# ───────── Thread formatada ─────────
+@app.post("/thread", response_class=HTMLResponse)
 async def thread(request: Request):
-    form = await request.form()
-    canal_id = form["canal_id"]
-    thread_ts = form["thread_ts"]
+    form       = await request.form()
+    canal_id   = form["canal_id"]
+    thread_ts  = form["thread_ts"]
 
-    mensagens = []
+    tz_br = pytz.timezone("America/Sao_Paulo")
+    msgs  = []
+
     try:
         print(f"🔎 Buscando thread: canal={canal_id}, ts={thread_ts}")
-        thread = slack_client.conversations_replies(channel=canal_id, ts=thread_ts)
-        mensagens = thread.get("messages", [])
-        print(f"✅ {len(mensagens)} mensagens encontradas")
-    except SlackApiError as e:
-        print(f"❌ Erro Slack API: {e.response['error']}")
-    except Exception as e:
-        print(f"❌ Erro inesperado: {e}")
+        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
 
-    return templates.TemplateResponse("thread.html", {
-        "request": request,
-        "mensagens": mensagens
-    })
+        for m in resp.get("messages", []):
+            ts_float = float(m["ts"])
+            msgs.append(
+                {
+                    "user":   get_real_name(m.get("user", "")),
+                    "text":   formatar_texto_slack(m.get("text", "")),
+                    "ts":     dt.datetime.fromtimestamp(ts_float, tz_br).strftime("%d/%m/%Y às %Hh%M"),
+                    "orig":   m["ts"] == thread_ts,
+                }
+            )
+        print(f"✅ {len(msgs)} mensagens processadas")
+    except slack_errors.SlackApiError as e:
+        print("❌ Slack API:", e.response["error"])
+
+    return templates.TemplateResponse("thread.html", {"request": request, "mensagens": msgs})
 
 # ─────────── Helpers ───────────
 def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=None, capturado=None, mudou_tipo=None):
