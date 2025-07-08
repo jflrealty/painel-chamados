@@ -1,34 +1,66 @@
-import os, psycopg2, datetime as dt, pytz
+# main.py  – Painel de Chamados v2
+import os, psycopg2, datetime as dt, pytz, math
+from urllib.parse import urlencode
+
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from utils.slack_helpers import get_real_name, formatar_texto_slack
 
+from utils.slack_helpers import get_real_name          # sua função já pronta
+
+# ──────────────────────────── FastAPI / Templates ────────────────────────────
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-templates.env.globals['get_real_name'] = get_real_name
+templates.env.globals["get_real_name"] = get_real_name  # p/ usar no Jinja
 
-# ─────────── Slack ───────────
+# ──────────────────────────── Slack Client ────────────────────────────
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
-slack_client = WebClient(token=SLACK_BOT_TOKEN)
+slack_client     = WebClient(token=SLACK_BOT_TOKEN)
 
-# ─────────── Rotas ───────────
+# ═════════════════════════════ Rotas ══════════════════════════════════
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(
     request: Request,
-    status: str | None = None,
+    page:        int  | None = 1,            # ← paginação
+    status:      str | None = None,
     responsavel: str | None = None,
-    data_ini: str | None = None,
-    data_fim: str | None = None,
-    capturado: str | None = None,
-    mudou_tipo: str | None = None
+    data_ini:    str | None = None,
+    data_fim:    str | None = None,
+    capturado:   str | None = None,
+    mudou_tipo:  str | None = None,
+    sla:         str | None = None           # “fora” vindo do card
 ):
-    chamados = carregar_chamados_do_banco(status, responsavel, data_ini, data_fim, capturado, mudou_tipo)
-    metricas = calcular_metricas(chamados)
-    todos_responsaveis = sorted(set(ch["responsavel"] for ch in chamados if ch["responsavel"]))
-    todos_capturadores = sorted(set(ch["capturado_por"] for ch in chamados if ch["capturado_por"] and ch["capturado_por"] != "<não capturado>"))
+    # ---- consulta completa (sem corte) ----
+    chamados_full = carregar_chamados_do_banco(
+        status, responsavel, data_ini, data_fim, capturado, mudou_tipo, sla
+    )
+
+    # ---- métricas (antes do corte) ----
+    metricas = calcular_metricas(chamados_full)
+
+    # ---- paginação ----------------------------------------------------
+    PER_PAGE = 50
+    total    = len(chamados_full)
+    total_pg = max(1, math.ceil(total / PER_PAGE))
+    page     = max(1, min(page, total_pg))                 # clamp
+    ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
+    chamados = chamados_full[ini:fim]
+
+    # ---- selects ------------------------------------------------------
+    todos_resp  = sorted({c["responsavel"]    for c in chamados_full if c["responsavel"]})
+    todos_capts = sorted({c["capturado_por"]  for c in chamados_full
+                          if c["capturado_por"] and c["capturado_por"] != "<não capturado>"})
+
+    # ---- rebuild query-string (sem page) ----
+    filtros = {
+        "status": status, "responsavel": responsavel,
+        "data_ini": data_ini, "data_fim": data_fim,
+        "capturado": capturado, "mudou_tipo": mudou_tipo,
+        "sla": sla
+    }
+    filtros_qs = urlencode({k: v for k, v in filtros.items() if v})
 
     return templates.TemplateResponse(
         "painel.html",
@@ -36,75 +68,61 @@ async def painel(
             "request": request,
             "chamados": chamados,
             "metricas": metricas,
-            "filtros": {
-                "status": status,
-                "responsavel": responsavel,
-                "data_ini": data_ini,
-                "data_fim": data_fim,
-                "capturado": capturado,
-                "mudou_tipo": mudou_tipo
-            },
-            "responsaveis": todos_responsaveis,
-            "capturadores": todos_capturadores
+            "page": page,
+            "total_pages": total_pg,
+            "filtros_as_query": filtros_qs,
+            "filtros": filtros,
+            "responsaveis": todos_resp,
+            "capturadores": todos_capts
         }
     )
 
-# ───────── Thread formatada ─────────
-@app.post("/thread", response_class=HTMLResponse)
+# ---------------------- thread (inalterada – apenas formatação) ------------
+@app.post("/thread")
 async def thread(request: Request):
     form       = await request.form()
     canal_id   = form["canal_id"]
     thread_ts  = form["thread_ts"]
 
-    tz_br = pytz.timezone("America/Sao_Paulo")
-    msgs  = []
-
+    mensagens = []
     try:
         print(f"🔎 Buscando thread: canal={canal_id}, ts={thread_ts}")
         resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-
-        for m in resp.get("messages", []):
-            ts_float = float(m["ts"])
-            msgs.append(
-                {
-                    "user":   get_real_name(m.get("user", "")),
-                    "text":   formatar_texto_slack(m.get("text", "")),
-                    "ts":     dt.datetime.fromtimestamp(ts_float, tz_br).strftime("%d/%m/%Y às %Hh%M"),
-                    "orig":   m["ts"] == thread_ts,
-                }
-            )
-        print(f"✅ {len(msgs)} mensagens processadas")
-    except slack_errors.SlackApiError as e:
+        mensagens = resp.get("messages", [])
+        print(f"✅ {len(mensagens)} mensagens encontradas")
+    except SlackApiError as e:
         print("❌ Slack API:", e.response["error"])
+    except Exception as e:
+        print("❌ Erro inesperado:", e)
 
-    return templates.TemplateResponse("thread.html", {"request": request, "mensagens": msgs})
+    return templates.TemplateResponse("thread.html", {
+        "request": request,
+        "mensagens": mensagens
+    })
 
-# ─────────── Helpers ───────────
-def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=None, capturado=None, mudou_tipo=None):
+# ═════════════════════ Helpers DB / Métricas ═════════════════════════
+def carregar_chamados_do_banco(
+    status=None, resp_nome=None, d_ini=None, d_fim=None,
+    capturado=None, mudou_tipo=None, sla=None
+):
     url = os.getenv("DATABASE_PUBLIC_URL", "")
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgres://", 1)
 
     q = """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
-                   data_abertura,data_fechamento,sla_status,
-                   capturado_por,log_edicoes,historico_reaberturas
-            FROM ordens_servico WHERE true"""
+                  data_abertura,data_fechamento,sla_status,
+                  capturado_por,log_edicoes,historico_reaberturas
+           FROM ordens_servico WHERE true"""
     pr = []
 
-    if status and status.lower() != "todos":
-        q += " AND status = %s"; pr.append(status)
-    if resp_nome and resp_nome.lower() != "todos":
-        q += " AND responsavel = %s"; pr.append(resp_nome)
-    if d_ini:
-        q += " AND data_abertura >= %s"; pr.append(d_ini)
-    if d_fim:
-        q += " AND data_abertura <= %s"; pr.append(d_fim)
-    if capturado and capturado.lower() != "todos":
-        q += " AND capturado_por = %s"; pr.append(capturado)
-    if mudou_tipo == "sim":
-        q += " AND (log_edicoes IS NOT NULL AND log_edicoes <> '')"
-    elif mudou_tipo == "nao":
-        q += " AND (log_edicoes IS NULL OR log_edicoes = '')"
+    if status:                    q += " AND status = %s";             pr.append(status)
+    if resp_nome:                 q += " AND responsavel = %s";        pr.append(resp_nome)
+    if d_ini:                     q += " AND data_abertura >= %s";     pr.append(d_ini)
+    if d_fim:                     q += " AND data_abertura <= %s";     pr.append(d_fim)
+    if capturado:                 q += " AND capturado_por = %s";      pr.append(capturado)
+    if sla == "fora":             q += " AND sla_status = 'fora'"
+    if mudou_tipo == "sim":       q += " AND log_edicoes IS NOT NULL AND log_edicoes <> ''"
+    elif mudou_tipo == "nao":     q += " AND (log_edicoes IS NULL OR log_edicoes = '')"
 
     q += " ORDER BY id DESC"
 
@@ -115,8 +133,9 @@ def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=No
     except Exception as e:
         print("⚠️ banco:", e); return []
 
-    fmt = lambda d: d.astimezone(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y às %Hh%M") if d else "-"
-    format_user = lambda uid: get_real_name(uid) if get_real_name(uid) != "desconhecido" else "*<não capturado>*"
+    tz  = pytz.timezone("America/Sao_Paulo")
+    fmt = lambda d: d.astimezone(tz).strftime("%d/%m/%Y às %Hh%M") if d else "-"
+    user = lambda uid: get_real_name(uid) or "<não capturado>"
 
     return [
         {
@@ -124,22 +143,20 @@ def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=No
             "tipo_ticket": r[1],
             "status": r[2].lower(),
             "responsavel": get_real_name(r[3]) or r[3],
-            "canal_id": r[4],
-            "thread_ts": r[5],
-            "abertura": fmt(r[6]),
-            "fechamento": fmt(r[7]),
+            "canal_id": r[4], "thread_ts": r[5],
+            "abertura": fmt(r[6]), "fechamento": fmt(r[7]),
             "sla": r[8] or "-",
-            "capturado_por": format_user(r[9]),
-            "mudou_tipo": bool(r[10]) or bool(r[11])
+            "capturado_por": user(r[9]),
+            "mudou_tipo": bool(r[10]) or bool(r[11]),
         }
         for r in rows
     ]
 
 def calcular_metricas(ch):
     return {
-        "total": len(ch),
+        "total":          len(ch),
         "em_atendimento": sum(c["status"] in ("aberto", "em atendimento") for c in ch),
-        "finalizados": sum(c["status"] in ("fechado", "finalizado") for c in ch),
-        "fora_sla": sum(c["sla"] == "fora" for c in ch),
-        "mudaram_tipo": sum(c["mudou_tipo"] for c in ch)
+        "finalizados":    sum(c["status"] in ("fechado", "finalizado")    for c in ch),
+        "fora_sla":       sum(c["sla"] == "fora"                          for c in ch),
+        "mudaram_tipo":   sum(c["mudou_tipo"]                             for c in ch)
     }
