@@ -1,149 +1,95 @@
-import os
-import psycopg2
+# main.py  – Painel de Chamados (FastAPI)
+import os, psycopg2, datetime as dt
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from utils.slack_helpers import get_real_name
-from datetime import datetime
+from utils.slack_helpers import get_real_name          # função já criada
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 templates = Jinja2Templates(directory="templates")
 
-# Slack Client a partir da variável do Railway
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-slack_client = WebClient(token=SLACK_BOT_TOKEN)
+# ─────────── Slack ───────────
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
+slack_client     = WebClient(token=SLACK_BOT_TOKEN)
 
+# ─────────── Rotas ───────────
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(
     request: Request,
-    status: str = None,
-    responsavel: str = None,
-    data_ini: str = None,
-    data_fim: str = None
+    status: str | None = None,
+    responsavel: str | None = None,             # agora vem o nome
+    data_ini: str | None = None,
+    data_fim: str | None = None
 ):
     chamados = carregar_chamados_do_banco(status, responsavel, data_ini, data_fim)
-    totais = calcular_metricas(chamados)
-    return templates.TemplateResponse("painel.html", {
-        "request": request,
-        "chamados": chamados,
-        "totais": totais
-    })
+    metricas = calcular_metricas(chamados)
+    return templates.TemplateResponse(
+        "painel.html",
+        {"request": request, "chamados": chamados, "metricas": metricas}
+    )
 
 @app.post("/thread", response_class=HTMLResponse)
-async def show_thread(
-    request: Request,
-    canal_id: str = Form(...),
-    thread_ts: str = Form(...)
-):
+async def thread(request: Request, canal_id: str = Form(...), thread_ts: str = Form(...)):
     try:
-        resp = slack_client.conversations_replies(
-            channel=canal_id,
-            ts=thread_ts,
-            limit=200
-        )
-        messages = [
+        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
+        msgs = [
             {
-                "user": get_real_name(m.get("user", "desconhecido")),  # ⬅️ Nome real
+                "user": get_real_name(m.get("user") or ""),
                 "text": m.get("text", ""),
-                "ts": m.get("ts")
+                "ts": dt.datetime.fromtimestamp(float(m["ts"])).strftime("%d/%m/%Y às %Hh%M")
             }
             for m in resp.get("messages", [])
         ]
     except SlackApiError as e:
-        return templates.TemplateResponse("thread.html", {
-            "request": request,
-            "messages": [],
-            "error": str(e)
-        })
+        msgs, canal_id = [], f"Erro Slack: {e.response['error']}"
+    return templates.TemplateResponse("thread.html", {"request": request, "msgs": msgs})
 
-    return templates.TemplateResponse("thread.html", {
-        "request": request,
-        "messages": messages,
-        "canal": canal_id,
-        "thread": thread_ts
-    })
+# ─────────── Helpers ───────────
+def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=None):
+    url = os.getenv("DATABASE_PUBLIC_URL", "")
+    if url.startswith("postgresql://"):                      # adaptação p/ psycopg2
+        url = url.replace("postgresql://", "postgres://", 1)
 
-def carregar_chamados_do_banco(status=None, responsavel=None, data_ini=None, data_fim=None):
-    DATABASE_URL = os.environ.get("DATABASE_PUBLIC_URL")
+    q  = """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
+                   data_abertura,data_fechamento,sla_status
+            FROM ordens_servico WHERE true"""
+    pr = []
 
-    if not DATABASE_URL:
-        return []
+    if status and status.lower() != "todos":
+        q += " AND status = %s";               pr.append(status)
+    if resp_nome and resp_nome.lower() != "todos":
+        q += " AND responsavel = %s";          pr.append(resp_nome)
+    if d_ini:
+        q += " AND data_abertura >= %s";       pr.append(d_ini)
+    if d_fim:
+        q += " AND data_abertura <= %s";       pr.append(d_fim)
 
-    if DATABASE_URL.startswith("postgresql://"):
-        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgres://", 1)
+    q += " ORDER BY id DESC"                   # sem LIMIT → traz tudo
 
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-
-        query = """
-            SELECT id, tipo_ticket, status, responsavel, canal_id, thread_ts, data_abertura, data_fechamento, sla_status
-            FROM ordens_servico
-            WHERE 1=1
-        """
-        params = []
-
-        if status:
-            query += " AND status = %s"
-            params.append(status)
-        if responsavel:
-            query += " AND responsavel = %s"
-            params.append(responsavel)
-        if data_ini:
-            query += " AND data_abertura >= %s"
-            params.append(data_ini)
-        if data_fim:
-            query += " AND data_abertura <= %s"
-            params.append(data_fim)
-
-        query += " ORDER BY id DESC LIMIT 100"
-
-        cur.execute(query, tuple(params))
-        rows = cur.fetchall()
-        chamados = []
-        for r in rows:
-            chamados.append({
-                "id": r[0],
-                "tipo_ticket": r[1],
-                "status": r[2],
-                "responsavel": get_real_name(r[3]),
-                "canal_id": r[4],
-                "thread_ts": r[5],
-                "data_abertura": formatar_data_br(r[6]),
-                "data_fechamento": formatar_data_br(r[7]),
-                "sla_status": r[8]
-            })
-        cur.close()
-        conn.close()
-        return chamados
+        with psycopg2.connect(url) as conn, conn.cursor() as cur:
+            cur.execute(q, tuple(pr))
+            rows = cur.fetchall()
     except Exception as e:
-        print(f"❌ ERRO ao conectar ao banco: {e}")
-        return []
+        print("⚠️ banco:", e); return []
 
-def calcular_metricas(chamados):
-    total = len(chamados)
-    em_atendimento = len([c for c in chamados if c["status"] == "Em Atendimento"])
-    finalizados = len([c for c in chamados if c["status"] == "Finalizado"])
-    fora_sla = len([c for c in chamados if c["sla_status"] == "Fora do SLA"])
+    fmt = lambda d: d.strftime("%d/%m/%Y às %Hh%M") if d else "-"
+    return [
+        {
+            "id": r[0], "tipo_ticket": r[1], "status": r[2],
+            "responsavel": get_real_name(r[3]) or r[3],
+            "canal_id": r[4], "thread_ts": r[5],
+            "abertura": fmt(r[6]), "fechamento": fmt(r[7]),
+            "sla": r[8] or "-"
+        } for r in rows
+    ]
 
+def calcular_metricas(ch):
     return {
-        "total": total,
-        "em_atendimento": em_atendimento,
-        "finalizados": finalizados,
-        "fora_sla": fora_sla
+        "total": len(ch),
+        "em_atendimento": sum(c["status"] == "aberto"  for c in ch),
+        "finalizados":    sum(c["status"] == "fechado" for c in ch),
+        "fora_sla":       sum(c["sla"]   == "fora"     for c in ch)
     }
-
-def formatar_data_br(dt):
-    if not dt:
-        return "-"
-    if isinstance(dt, str):
-        try:
-            dt = datetime.fromisoformat(dt)
-        except ValueError:
-            return dt
-    return dt.strftime("%d/%m/%Y às %Hh%M")
