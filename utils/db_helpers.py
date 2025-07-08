@@ -1,36 +1,25 @@
-"""
-Funções de acesso ao Postgres centralizadas.
-Nenhuma lógica de apresentação aqui!
-"""
+# =======================
+# 📁 db_helpers.py – Painel de Chamados
+# =======================
 import os, psycopg2, pytz
 from utils.slack_helpers import get_real_name
 
 _TZ = pytz.timezone("America/Sao_Paulo")
 
-
-# ───────────────────────── Helpers internos ─────────────────────────
 def _fmt(dt_obj):
-    """Converte datetime → string local / placeholder."""
-    return (
-        dt_obj.astimezone(_TZ).strftime("%d/%m/%Y %H:%M")
-        if dt_obj else "-"
-    )
-
+    return dt_obj.astimezone(_TZ).strftime("%d/%m/%Y %H:%M") if dt_obj else "-"
 
 def _user(uid: str) -> str:
-    """UID → nome real ou &lt;não capturado&gt; em itálico."""
     nome = get_real_name(uid)
     if not nome or nome.startswith(("U", "B", "W", "S")):
         return "<não capturado>"
     return nome
-
 
 def _base_sql():
     return """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
                      data_abertura,data_fechamento,sla_status,
                      capturado_por,log_edicoes,historico_reaberturas
               FROM ordens_servico WHERE true"""
-
 
 def _apply_filters(q: str, pr: list, *,
                    status=None, resp=None, d_ini=None, d_fim=None,
@@ -49,10 +38,7 @@ def _apply_filters(q: str, pr: list, *,
                "AND (historico_reaberturas IS NULL OR historico_reaberturas = '') )")
     return q, pr
 
-
-# ───────────────────────── API pública ─────────────────────────
 def contar_chamados(**filtros) -> int:
-    """COUNT(*) com todos os filtros."""
     q, pr = _apply_filters(_base_sql().replace("*", "COUNT(*)"), [], **filtros)
     url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
     try:
@@ -63,15 +49,11 @@ def contar_chamados(**filtros) -> int:
         print("DB ERRO (contagem):", e)
         return 0
 
-
 def carregar_chamados(*, limit: int | None = None, offset: int | None = None, **filtros):
-    """Retorna lista de dicionários já formatados."""
     q, pr = _apply_filters(_base_sql(), [], **filtros)
     q += " ORDER BY id DESC"
-    if limit:
-        q += f" LIMIT {limit}"
-    if offset:
-        q += f" OFFSET {offset}"
+    if limit: q += f" LIMIT {limit}"
+    if offset: q += f" OFFSET {offset}"
 
     url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
     try:
@@ -99,9 +81,7 @@ def carregar_chamados(*, limit: int | None = None, offset: int | None = None, **
         for r in rows
     ]
 
-
 def listar_responsaveis(**filtros) -> list[str]:
-    """Retorna nomes distintos já convertidos."""
     q = "SELECT DISTINCT responsavel FROM ordens_servico WHERE true"
     q, pr = _apply_filters(q, [], **filtros)
     url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
@@ -112,9 +92,7 @@ def listar_responsaveis(**filtros) -> list[str]:
     except Exception:
         return []
 
-
 def listar_capturadores(**filtros) -> list[str]:
-    """Retorna capturadores distintos (exclui <não capturado>)."""
     q = "SELECT DISTINCT capturado_por FROM ordens_servico WHERE true"
     q, pr = _apply_filters(q, [], **filtros)
     url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
