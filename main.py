@@ -92,23 +92,33 @@ async def painel(
 
 @app.post("/thread")
 async def thread(request: Request):
-    form      = await request.form()
-    canal_id  = form["canal_id"]
-    thread_ts = form["thread_ts"]
+    form       = await request.form()
+    canal_id   = form["canal_id"]
+    thread_ts  = form["thread_ts"]
 
     mensagens = []
     try:
-        resp       = slack_client.conversations_replies(
-            channel=canal_id, ts=thread_ts, limit=200
-        )
-        mensagens  = resp.get("messages", [])
-    except slack_err.SlackApiError as e:
-        print("Slack API erro:", e.response["error"])
+        print(f"🔎 Buscando thread: canal={canal_id}, ts={thread_ts}")
+        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
+        mensagens_raw = resp.get("messages", [])
+        mensagens = [
+            {
+                "texto": formatar_mensagem(m.get("text", "")),
+                "ts": m.get("ts", ""),
+                "user": get_real_name(m.get("user", "-")) or "-"
+            }
+            for m in mensagens_raw
+        ]
+        print(f"✅ {len(mensagens)} mensagens encontradas")
+    except SlackApiError as e:
+        print("❌ Slack API:", e.response["error"])
+    except Exception as e:
+        print("❌ Erro inesperado:", e)
 
-    return templates.TemplateResponse(
-        "thread.html",
-        {"request": request, "mensagens": mensagens},
-    )
+    return templates.TemplateResponse("thread.html", {
+        "request": request,
+        "mensagens": mensagens
+    })
 
 # ═════════════ HELPERS ═════════════
 def traduzir_usuario(uid: str) -> str:
