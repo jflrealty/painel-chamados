@@ -50,30 +50,34 @@
     <div class="col-md-3">
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
-        <option value="">Todos</option>
-        <option value="Aberto">Aberto</option>
-        <option value="Em Atendimento">Em Atendimento</option>
-        <option value="Finalizado">Finalizado</option>
-        <option value="Cancelado">Cancelado</option>
+        <option value="" {% if not filtros.status %}selected{% endif %}>Todos</option>
+        <option value="Aberto" {% if filtros.status == "Aberto" %}selected{% endif %}>Aberto</option>
+        <option value="Em Atendimento" {% if filtros.status == "Em Atendimento" %}selected{% endif %}>Em Atendimento</option>
+        <option value="Finalizado" {% if filtros.status == "Finalizado" %}selected{% endif %}>Finalizado</option>
+        <option value="Cancelado" {% if filtros.status == "Cancelado" %}selected{% endif %}>Cancelado</option>
       </select>
     </div>
+
     <div class="col-md-3">
-  <label class="form-label">Responsável</label>
-  <select name="responsavel" class="form-select">
-    <option value="">Todos</option>
-    {% for r in responsaveis %}
-      <option value="{{ r }}" {% if filtros.responsavel == r %}selected{% endif %}>{{ r }}</option>
-    {% endfor %}
-    </select>
-  </div>
+      <label class="form-label">Responsável</label>
+      <select name="responsavel" class="form-select">
+        <option value="">Todos</option>
+        {% for r in responsaveis %}
+          <option value="{{ r }}" {% if filtros.responsavel == r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
     <div class="col-md-2">
       <label class="form-label">Data Início</label>
-      <input type="date" name="data_ini" class="form-control">
+      <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
     </div>
+
     <div class="col-md-2">
       <label class="form-label">Data Fim</label>
-      <input type="date" name="data_fim" class="form-control">
+      <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
     </div>
+
     <div class="col-md-2 d-flex align-items-end">
       <button class="btn btn-primary w-100">Filtrar</button>
     </div>
