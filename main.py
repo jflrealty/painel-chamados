@@ -1,4 +1,3 @@
-# main.py  – Painel de Chamados (FastAPI)
 import os, psycopg2, datetime as dt
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
