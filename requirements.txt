@@ -5,3 +5,5 @@ python-multipart
 slack-sdk
 psycopg2-binary
 pytz
+pandas>=2.2
+openpyxl>=3.1
