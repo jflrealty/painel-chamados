@@ -1,54 +1,126 @@
-Centraliza tudo que é ‘dados do banco’, para evitar import circular.
 """
-import os, psycopg2, pytz, datetime as dt
+Funções de acesso ao Postgres centralizadas.
+Nenhuma lógica de apresentação aqui!
+"""
+import os, psycopg2, pytz
 from utils.slack_helpers import get_real_name
 
-TZ = pytz.timezone("America/Sao_Paulo")
+_TZ = pytz.timezone("America/Sao_Paulo")
 
+
+# ───────────────────────── Helpers internos ─────────────────────────
 def _fmt(dt_obj):
-    return dt_obj.astimezone(TZ).strftime("%d/%m/%Y às %Hh%M") if dt_obj else "-"
+    """Converte datetime → string local / placeholder."""
+    return (
+        dt_obj.astimezone(_TZ).strftime("%d/%m/%Y %H:%M")
+        if dt_obj else "-"
+    )
 
-def _u(uid):
+
+def _user(uid: str) -> str:
+    """UID → nome real ou &lt;não capturado&gt; em itálico."""
     nome = get_real_name(uid)
-    # se ainda parece um UID ou falhou:
-    if not nome or nome.startswith(("U0", "U1", "W0", "B0", "S0")):
+    if not nome or nome.startswith(("U", "B", "W", "S")):
         return "<não capturado>"
     return nome
 
-def contar_chamados(status=None, resp_nome=None, d_ini=None, d_fim=None,
-                    capturado=None, mudou_tipo=None, sla=None):
-    url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
-    q  = "SELECT COUNT(*) FROM ordens_servico WHERE true"
-    pr = []
-    if status:     q += " AND status = %s";              pr.append(status)
-    if resp_nome:  q += " AND responsavel = %s";         pr.append(resp_nome)
-    if d_ini:      q += " AND data_abertura >= %s";      pr.append(d_ini)
-    if d_fim:      q += " AND data_abertura <= %s";      pr.append(d_fim)
-    if capturado:  q += " AND capturado_por = %s";       pr.append(capturado)
+
+def _base_sql():
+    return """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
+                     data_abertura,data_fechamento,sla_status,
+                     capturado_por,log_edicoes,historico_reaberturas
+              FROM ordens_servico WHERE true"""
+
+
+def _apply_filters(q: str, pr: list, *,
+                   status=None, resp=None, d_ini=None, d_fim=None,
+                   capturado=None, mudou_tipo=None, sla=None) -> tuple[str, list]:
+    if status:     q += " AND status = %s";          pr.append(status)
+    if resp:       q += " AND responsavel = %s";     pr.append(resp)
+    if d_ini:      q += " AND data_abertura >= %s";  pr.append(d_ini)
+    if d_fim:      q += " AND data_abertura <= %s";  pr.append(d_fim)
+    if capturado:  q += " AND capturado_por = %s";   pr.append(capturado)
     if sla == "fora": q += " AND sla_status = 'fora'"
     if mudou_tipo == "sim":
-        q += " AND ( (log_edicoes IS NOT NULL AND log_edicoes <> '') \
-                     OR (historico_reaberturas IS NOT NULL AND historico_reaberturas <> '') )"
+        q += (" AND ( (log_edicoes IS NOT NULL AND log_edicoes <> '') "
+               "OR (historico_reaberturas IS NOT NULL AND historico_reaberturas <> '') )")
     elif mudou_tipo == "nao":
-        q += " AND ( (log_edicoes IS NULL OR log_edicoes = '') \
-                     AND (historico_reaberturas IS NULL OR historico_reaberturas = '') )"
+        q += (" AND ( (log_edicoes IS NULL OR log_edicoes = '') "
+               "AND (historico_reaberturas IS NULL OR historico_reaberturas = '') )")
+    return q, pr
+
+
+# ───────────────────────── API pública ─────────────────────────
+def contar_chamados(**filtros) -> int:
+    """COUNT(*) com todos os filtros."""
+    q, pr = _apply_filters(_base_sql().replace("*", "COUNT(*)"), [], **filtros)
+    url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
     try:
         with psycopg2.connect(url) as conn, conn.cursor() as cur:
-            cur.execute(q, tuple(pr))
-            total = cur.fetchone()[0]
-            return total
+            cur.execute(q, pr)
+            return cur.fetchone()[0]
     except Exception as e:
         print("DB ERRO (contagem):", e)
         return 0
 
-    tz  = pytz.timezone("America/Sao_Paulo")
-    fmt = lambda d: d.astimezone(tz).strftime("%d/%m/%Y %H:%M") if d else "-"
-    return [{
-        "id": r[0], "tipo_ticket": r[1], "status": r[2].lower(),
-        "responsavel": traduzir_usuario(r[3]),
-        "canal_id": r[4], "thread_ts": r[5],
-        "abertura": fmt(r[6]), "fechamento": fmt(r[7]),
-        "sla": (r[8] or "-").lower(),
-        "capturado_por": traduzir_usuario(r[9]),
-        "mudou_tipo": bool(r[10]) or bool(r[11]),
-    } for r in rows]
+
+def carregar_chamados(*, limit: int | None = None, offset: int | None = None, **filtros):
+    """Retorna lista de dicionários já formatados."""
+    q, pr = _apply_filters(_base_sql(), [], **filtros)
+    q += " ORDER BY id DESC"
+    if limit:
+        q += f" LIMIT {limit}"
+    if offset:
+        q += f" OFFSET {offset}"
+
+    url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
+    try:
+        with psycopg2.connect(url) as conn, conn.cursor() as cur:
+            cur.execute(q, pr)
+            rows = cur.fetchall()
+    except Exception as e:
+        print("DB ERRO (fetch):", e)
+        return []
+
+    return [
+        {
+            "id": r[0],
+            "tipo_ticket": r[1],
+            "status": r[2].lower(),
+            "responsavel": _user(r[3]),
+            "canal_id": r[4],
+            "thread_ts": r[5],
+            "abertura": _fmt(r[6]),
+            "fechamento": _fmt(r[7]),
+            "sla": (r[8] or "-").lower(),
+            "capturado_por": _user(r[9]),
+            "mudou_tipo": bool(r[10]) or bool(r[11]),
+        }
+        for r in rows
+    ]
+
+
+def listar_responsaveis(**filtros) -> list[str]:
+    """Retorna nomes distintos já convertidos."""
+    q = "SELECT DISTINCT responsavel FROM ordens_servico WHERE true"
+    q, pr = _apply_filters(q, [], **filtros)
+    url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
+    try:
+        with psycopg2.connect(url) as conn, conn.cursor() as cur:
+            cur.execute(q, pr)
+            return sorted({_user(r[0]) for r in cur.fetchall()})
+    except Exception:
+        return []
+
+
+def listar_capturadores(**filtros) -> list[str]:
+    """Retorna capturadores distintos (exclui <não capturado>)."""
+    q = "SELECT DISTINCT capturado_por FROM ordens_servico WHERE true"
+    q, pr = _apply_filters(q, [], **filtros)
+    url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
+    try:
+        with psycopg2.connect(url) as conn, conn.cursor() as cur:
+            cur.execute(q, pr)
+            return sorted({_user(r[0]) for r in cur.fetchall() if _user(r[0]) != "<não capturado>"})
+    except Exception:
+        return []
