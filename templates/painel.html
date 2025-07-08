@@ -14,18 +14,7 @@
 </head>
 <body>
   <div class="mb-3"><a class="btn btn-outline-dark" href="/painel">🏠 Home</a></div>
-  <!-- Exportar -->
-<div class="dropdown d-inline-block ms-2">
-  <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown">
-    Exportar
-  </button>
-  <ul class="dropdown-menu">
-    <li><a class="dropdown-item"
-           href="/exportar?{{ filtros_as_query }}&tipo=xlsx">Excel (.xlsx)</a></li>
-    <li><a class="dropdown-item"
-           href="/exportar?{{ filtros_as_query }}&tipo=csv">CSV (;)</a></li>
-  </ul>
-</div>
+
   <h2 class="mb-4">Painel de Chamados</h2>
 
   <!-- Métricas -->
@@ -98,8 +87,22 @@
       <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
     </div>
 
-    <div class="col-12 d-flex justify-content-end">
-      <button class="btn btn-primary mt-2">Filtrar</button>
+    <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+      <button type="submit" class="btn btn-primary shadow-sm">Filtrar</button>
+
+      <div class="dropdown">
+        <button class="btn btn-success shadow-sm dropdown-toggle" data-bs-toggle="dropdown">
+          Exportar
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <a class="dropdown-item" href="#" onclick="exportarChamados('xlsx')">📊 Excel (.xlsx)</a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" onclick="exportarChamados('csv')">📄 CSV (;)</a>
+          </li>
+        </ul>
+      </div>
     </div>
   </form>
 
@@ -164,6 +167,16 @@
       document.getElementById("modal-content").innerHTML=html;
       document.getElementById("modal").style.display="block";
     }
+
+    function exportarChamados(tipo){
+      const form = document.querySelector("form");
+      const data = new FormData(form);
+      const params = new URLSearchParams(data);
+      params.append("tipo", tipo);
+      const url = "/exportar?" + params.toString();
+      window.open(url, "_blank");
+    }
   </script>
+
 </body>
 </html>
