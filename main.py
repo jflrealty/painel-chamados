@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient, errors as slack_err
 from export import export_router
-from utils.db_helpers import carregar_chamados 
+from utils.db_helpers import carregar_chamados, contar_chamados
 
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
@@ -49,23 +49,21 @@ async def painel(
     )
     metricas = calcular_metricas(chamados_full)
 
-   # paginação ----------------------------------------------
-PER_PAGE = 20
-total = len(carregar_chamados(
-    status, responsavel, data_ini, data_fim,
-    capturado, mudou_tipo, sla
-))
+# paginação otimizada ----------------------------
+PER_PAGE = 50
+total = contar_chamados(status, responsavel, data_ini, data_fim,
+                         capturado, mudou_tipo, sla)
+
 paginas_totais = max(1, math.ceil(total / PER_PAGE))
 page = max(1, min(page, paginas_totais))
 ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
 
-# dados da página atual — já com LIMIT/OFFSET no SQL
+# agora sim só busca os dados da página atual
 chamados = carregar_chamados(
     status, responsavel, data_ini, data_fim,
     capturado, mudou_tipo, sla,
     limit=PER_PAGE, offset=ini
 )
-
     # query-string p/ paginação ----------------------------------------
     filtros_dict = {
         "status": status, "responsavel": responsavel,
