@@ -5,21 +5,20 @@
   <title>Histórico da Thread</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { padding: 20px; background: #f9f9f9; font-family: 'Segoe UI', sans-serif }
-    .msg { background: #fff; border-radius: 10px; box-shadow: 0 0 5px rgba(0,0,0,.05); padding: 15px 20px; margin-bottom: 15px }
-    .msg.orig { border-left: 5px solid #0d6efd }
-    .user { font-weight: 600; color: #0d6efd }
-    .timestamp { font-size: .8rem; color: #888; margin-top: 4px }
-    .text { white-space: pre-wrap; margin-top: 6px }
+    body{background:#f9f9f9;padding:20px;font-family:'Segoe UI',sans-serif}
+    .msg{background:#fff;border-radius:10px;box-shadow:0 0 5px rgba(0,0,0,.05);padding:15px 20px;margin-bottom:15px}
+    .msg.orig{border-left:5px solid #0d6efd}
+    .user{font-weight:600;color:#0d6efd}
+    .timestamp{font-size:.8rem;color:#888;margin-top:4px}
+    .text{white-space:pre-wrap;margin-top:6px}
   </style>
 </head>
 <body>
-
 <h4 class="mb-4">Histórico da Thread</h4>
 
 {% if mensagens %}
   {% for m in mensagens %}
-    <div class="msg {% if loop.index0 == 0 %}orig{% endif %}">
+    <div class="msg {% if m.orig %}orig{% endif %}">
       <div class="user">
         {% if m.user == "<não capturado>" %}
           <em>&lt;não capturado&gt;</em>
@@ -34,6 +33,5 @@
 {% else %}
   <div class="alert alert-warning">Nenhuma mensagem encontrada nesta thread.</div>
 {% endif %}
-
 </body>
 </html>
