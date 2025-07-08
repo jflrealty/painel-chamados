@@ -116,7 +116,7 @@ def carregar_chamados_do_banco(status=None, resp_nome=None, d_ini=None, d_fim=No
         print("⚠️ banco:", e); return []
 
     fmt = lambda d: d.astimezone(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y às %Hh%M") if d else "-"
-    format_user = lambda uid: get_real_name(uid) or "<não capturado>"
+    format_user = lambda uid: get_real_name(uid) if get_real_name(uid) != "desconhecido" else "*<não capturado>*"
 
     return [
         {
