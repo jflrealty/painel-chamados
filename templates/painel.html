@@ -5,25 +5,16 @@
   <title>Painel de Chamados</title>
 
   <!-- Bootstrap 5 -->
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  >
-
-  <!-- (Opcional) Seu CSS extra -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
-
   <style>
     body            { background:#f8f9fa; padding:20px }
-    .card-metric    { min-width:180px }
+    .card-metric    { min-width:180px; cursor:pointer; text-decoration:none; color:inherit; }
     table td,th     { vertical-align:middle }
-    .modal-thread   { display:none; position:fixed; top:10%; left:10%;
-                      width:80%; height:80%; background:#fff; padding:20px;
-                      border:2px solid #444; overflow:auto; z-index:1000 }
+    .modal-thread   { display:none; position:fixed; top:10%; left:10%; width:80%; height:80%; background:#fff; padding:20px; border:2px solid #444; overflow:auto; z-index:1000 }
   </style>
 </head>
 <body>
-
   <h2 class="mb-4">Painel de Chamados</h2>
 
   <!-- ░░░░░  MÉTRICAS  ░░░░░ -->
@@ -35,31 +26,27 @@
         ('fora_sla','Fora do SLA','danger'),
         ('mudaram_tipo','Alteraram&nbsp;Tipo','info')
       ] %}
-      <div class="card card-metric shadow-sm">
-        <div class="card-body text-center">
+      <a href="/painel?{{ key }}=1" class="card card-metric shadow-sm text-center text-decoration-none">
+        <div class="card-body">
           <h6 class="card-title">{{ label|safe }}</h6>
           <p class="fs-4 text-{{ color }}">{{ metricas[key] }}</p>
         </div>
-      </div>
+      </a>
     {% endfor %}
   </div>
 
   <!-- ░░░░░  FILTROS  ░░░░░ -->
   <form method="get" action="/painel" class="row g-3 mb-4">
-    <!-- Status -->
     <div class="col-md-2">
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
         {% set sts = ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
         {% for s in sts %}
-          <option value="{{ s }}" {% if filtros.status==s %}selected{% endif %}>
-            {{ 'Todos' if not s else s }}
-          </option>
+          <option value="{{ s }}" {% if filtros.status==s %}selected{% endif %}>{{ 'Todos' if not s else s }}</option>
         {% endfor %}
       </select>
     </div>
 
-    <!-- Responsável -->
     <div class="col-md-2">
       <label class="form-label">Responsável</label>
       <select name="responsavel" class="form-select">
@@ -70,7 +57,6 @@
       </select>
     </div>
 
-    <!-- Capturado por -->
     <div class="col-md-2">
       <label class="form-label">Capturado por</label>
       <select name="capturado" class="form-select">
@@ -81,24 +67,23 @@
       </select>
     </div>
 
-    <!-- Mudou Tipo -->
     <div class="col-md-2">
       <label class="form-label">Mudou Tipo?</label>
       <select name="mudou_tipo" class="form-select">
-        <option value=""      {% if not filtros.mudou_tipo %}selected{% endif %}>Todos</option>
-        <option value="sim"   {% if filtros.mudou_tipo=='sim' %}selected{% endif %}>Sim</option>
-        <option value="nao"   {% if filtros.mudou_tipo=='nao' %}selected{% endif %}>Não</option>
+        <option value="" {% if not filtros.mudou_tipo %}selected{% endif %}>Todos</option>
+        <option value="sim" {% if filtros.mudou_tipo=='sim' %}selected{% endif %}>Sim</option>
+        <option value="nao" {% if filtros.mudou_tipo=='nao' %}selected{% endif %}>Não</option>
       </select>
     </div>
 
-    <!-- Datas -->
     <div class="col-md-2">
       <label class="form-label">Data Início</label>
-      <input type="date"  name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
+      <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
     </div>
+
     <div class="col-md-2">
       <label class="form-label">Data Fim</label>
-      <input type="date"  name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
+      <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
     </div>
 
     <div class="col-12 d-flex justify-content-end">
@@ -132,21 +117,31 @@
               <span class="badge bg-danger">✘</span>
             {% else %}-{% endif %}
           </td>
-          <td>{{ ch.capturado_por }}</td>
+          <td><i>{{ ch.capturado_por }}</i></td>
           <td class="text-center">
             {% if ch.mudou_tipo %}<span class="badge bg-info">⚡</span>{% else %}-{% endif %}
           </td>
           <td>
-            <button class="btn btn-sm btn-outline-primary"
-                    onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">
-              Ver Thread
-            </button>
+            <button class="btn btn-sm btn-outline-primary" onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">Ver Thread</button>
           </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <!-- Paginação -->
+  {% if paginas_totais > 1 %}
+  <nav class="mt-4">
+    <ul class="pagination justify-content-center">
+      {% for p in range(1, paginas_totais+1) %}
+        <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+          <a class="page-link" href="{{ url_paginacao }}&page={{ p }}">{{ p }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
 
   <!-- ░░░░░  MODAL THREAD  ░░░░░ -->
   <div id="modal" class="modal-thread">
@@ -159,7 +154,6 @@
       const fd = new FormData();
       fd.append("canal_id", canal);
       fd.append("thread_ts", ts);
-
       const resp = await fetch("/thread", {method:"POST", body:fd});
       document.getElementById("modal-content").innerHTML = await resp.text();
       document.getElementById("modal").style.display = "block";
