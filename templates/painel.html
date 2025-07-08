@@ -58,9 +58,14 @@
       </select>
     </div>
     <div class="col-md-3">
-      <label class="form-label">Responsável</label>
-      <input name="responsavel" class="form-control" placeholder="Nome do responsável">
-    </div>
+  <label class="form-label">Responsável</label>
+  <select name="responsavel" class="form-select">
+    <option value="">Todos</option>
+    {% for r in responsaveis %}
+      <option value="{{ r }}" {% if filtros.responsavel == r %}selected{% endif %}>{{ r }}</option>
+    {% endfor %}
+    </select>
+  </div>
     <div class="col-md-2">
       <label class="form-label">Data Início</label>
       <input type="date" name="data_ini" class="form-control">
