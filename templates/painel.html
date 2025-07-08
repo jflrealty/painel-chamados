@@ -25,23 +25,23 @@
 
   <h2 class="mb-4">Painel de Chamados</h2>
 
-  <!-- ░░░ Cards Métricas ░░░ -->
-  <div class="d-flex flex-wrap gap-4 mb-4">
-    {% for key,label,color,qs in [
-        ('total','Total','',        'page=1'),                              # total = home
-        ('em_atendimento','Em Atendimento','warning','so_ema=1'),
-        ('finalizados','Finalizados','success',     'so_fin=1'),
-        ('fora_sla','Fora do SLA','danger',        'so_sla=1'),
-        ('mudaram_tipo','Alteraram&nbsp;Tipo','info','so_mud=1')
-      ] %}
-      <a href="/painel?{{ qs }}" class="card card-metric shadow-sm text-center">
-        <div class="card-body">
-          <h6 class="card-title">{{ label|safe }}</h6>
-          <p class="fs-4 text-{{ color }}">{{ metricas[key] }}</p>
-        </div>
-      </a>
-    {% endfor %}
-  </div>
+<!-- ░░░░░  MÉTRICAS  ░░░░░ -->
+<div class="d-flex flex-wrap gap-4 mb-4">
+  {% for key,label,color,qs in [
+      ('total','Total','',        'page=1'),
+      ('em_atendimento','Em Atendimento','warning','so_ema=1'),
+      ('finalizados','Finalizados','success','so_fin=1'),
+      ('fora_sla','Fora do SLA','danger','so_sla=1'),
+      ('mudaram_tipo','Alteraram&nbsp;Tipo','info','so_mud=1')
+  ] %}
+    <a href="/painel?{{ qs }}" class="card card-metric shadow-sm text-center text-decoration-none">
+      <div class="card-body">
+        <h6 class="card-title">{{ label|safe }}</h6>
+        <p class="fs-4 text-{{ color }}">{{ metricas[key] }}</p>
+      </div>
+    </a>
+  {% endfor %}
+</div>
 
   <!-- ░░░ Filtros ░░░ -->
   <form method="get" action="/painel" class="row g-3 mb-4">
