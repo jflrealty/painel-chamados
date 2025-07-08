@@ -1,4 +1,5 @@
 import os
+import re
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
@@ -29,3 +30,66 @@ def get_real_name(user_id: str) -> str:
         )
     except SlackApiError:
         return user_id
+
+EMOJI_MAP = {
+    ":white_check_mark:": "✅",
+    ":heavy_check_mark:": "✔️",
+    ":x:": "❌",
+    ":warning:": "⚠️",
+    ":information_source:": "ℹ️",
+    ":rocket:": "🚀",
+    ":boom:": "💥",
+    ":arrows_counterclockwise:": "🔄",
+    ":clipboard:": "📋",
+    ":hourglass_flowing_sand:": "⏳",
+    ":hourglass:": "⌛",
+    ":memo:": "📝",
+    ":eyes:": "👀",
+    ":wastebasket:": "🗑️",
+    ":lock:": "🔒",
+    ":unlock:": "🔓",
+    ":key:": "🔑",
+    ":calendar:": "📅",
+    ":phone:": "📞",
+    ":email:": "✉️",
+    ":pushpin:": "📌",
+    ":mag:": "🔍",
+    ":question:": "❓",
+    ":star:": "⭐",
+    ":star2:": "🌟",
+    ":bulb:": "💡",
+    ":gear:": "⚙️",
+    ":house:": "🏠",
+    ":computer:": "💻",
+    ":chart_with_upwards_trend:": "📈",
+    ":bar_chart:": "📊"
+}
+
+GRUPO_MAP = {
+    "S08STJCNMHR": "Equipe Reservas",
+    # Adicione outros grupos aqui
+}
+
+def formatar_texto_slack(texto: str) -> str:
+    if not texto:
+        return ""
+
+    # Emojis tipo :rocket:
+    for emoji, simbolo in EMOJI_MAP.items():
+        texto = texto.replace(emoji, simbolo)
+
+    # Menções tipo <@U123>
+    texto = re.sub(
+        r"<@([A-Z0-9]+)>",
+        lambda m: get_real_name(m.group(1)) or f"@{m.group(1)}",
+        texto
+    )
+
+    # Grupos tipo <!subteam^S08STJCNMHR>
+    texto = re.sub(
+        r"<!subteam\^([A-Z0-9]+)>",
+        lambda m: GRUPO_MAP.get(m.group(1), f"[Grupo {m.group(1)}]"),
+        texto
+    )
+
+    return texto
