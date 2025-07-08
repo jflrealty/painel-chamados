@@ -18,15 +18,30 @@ slack_client     = WebClient(token=SLACK_BOT_TOKEN)
 async def painel(
     request: Request,
     status: str | None = None,
-    responsavel: str | None = None,             # agora vem o nome
+    responsavel: str | None = None,
     data_ini: str | None = None,
     data_fim: str | None = None
 ):
     chamados = carregar_chamados_do_banco(status, responsavel, data_ini, data_fim)
     metricas = calcular_metricas(chamados)
+
+    # lista única de responsáveis já com nomes reais
+    todos_responsaveis = sorted(set(ch["responsavel"] for ch in chamados if ch["responsavel"]))
+
     return templates.TemplateResponse(
         "painel.html",
-        {"request": request, "chamados": chamados, "metricas": metricas}
+        {
+            "request": request,
+            "chamados": chamados,
+            "metricas": metricas,
+            "filtros": {
+                "status": status,
+                "responsavel": responsavel,
+                "data_ini": data_ini,
+                "data_fim": data_fim
+            },
+            "responsaveis": todos_responsaveis
+        }
     )
 
 @app.post("/thread", response_class=HTMLResponse)
