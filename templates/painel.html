@@ -22,25 +22,25 @@
     <div class="card card-metric shadow-sm">
       <div class="card-body text-center">
         <h5 class="card-title">Total</h5>
-        <p class="fs-4">{{ totais.total }}</p>
+        <p class="fs-4">{{ metricas.total }}</p>
       </div>
     </div>
     <div class="card card-metric shadow-sm">
       <div class="card-body text-center">
         <h5 class="card-title">Em Atendimento</h5>
-        <p class="fs-4 text-warning">{{ totais.em_atendimento }}</p>
+        <p class="fs-4 text-warning">{{ metricas.em_atendimento }}</p>
       </div>
     </div>
     <div class="card card-metric shadow-sm">
       <div class="card-body text-center">
         <h5 class="card-title">Finalizados</h5>
-        <p class="fs-4 text-success">{{ totais.finalizados }}</p>
+        <p class="fs-4 text-success">{{ metricas.finalizados }}</p>
       </div>
     </div>
     <div class="card card-metric shadow-sm">
       <div class="card-body text-center">
         <h5 class="card-title">Fora do SLA</h5>
-        <p class="fs-4 text-danger">{{ totais.fora_sla }}</p>
+        <p class="fs-4 text-danger">{{ metricas.fora_sla }}</p>
       </div>
     </div>
   </div>
@@ -58,8 +58,8 @@
       </select>
     </div>
     <div class="col-md-3">
-      <label class="form-label">Responsável (ID Slack)</label>
-      <input name="responsavel" class="form-control" placeholder="U01...">
+      <label class="form-label">Responsável</label>
+      <input name="responsavel" class="form-control" placeholder="Nome do responsável">
     </div>
     <div class="col-md-2">
       <label class="form-label">Data Início</label>
@@ -96,12 +96,12 @@
           <td>{{ ch.tipo_ticket }}</td>
           <td>{{ ch.status }}</td>
           <td>{{ ch.responsavel }}</td>
-          <td>{{ ch.data_abertura or '' }}</td>
-          <td>{{ ch.data_fechamento or '' }}</td>
+          <td>{{ ch.abertura }}</td>
+          <td>{{ ch.fechamento }}</td>
           <td>
-            {% if ch.sla_status == 'Dentro do SLA' %}
+            {% if ch.sla == 'Dentro do SLA' %}
               <span class="badge bg-success">✔</span>
-            {% elif ch.sla_status == 'Fora do SLA' %}
+            {% elif ch.sla == 'Fora do SLA' %}
               <span class="badge bg-danger">✘</span>
             {% else %}
               <span class="text-muted">-</span>
