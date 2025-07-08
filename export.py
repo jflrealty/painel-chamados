@@ -22,7 +22,7 @@ async def exportar(
 ):
     chamados = carregar_chamados(
         status=status,
-        resp_nome=responsavel,
+        resp=responsavel,
         d_ini=data_ini,
         d_fim=data_fim,
         capturado=capturado,
