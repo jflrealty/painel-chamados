@@ -1,4 +1,3 @@
-"""
 Centraliza tudo que é ‘dados do banco’, para evitar import circular.
 """
 import os, psycopg2, pytz, datetime as dt
@@ -16,41 +15,31 @@ def _u(uid):
         return "<não capturado>"
     return nome
 
-def carregar_chamados(status=None, resp_nome=None, d_ini=None, d_fim=None,
-                      capturado=None, mudou_tipo=None, sla=None,
-                      limit=None, offset=None):
+def contar_chamados(status=None, resp_nome=None, d_ini=None, d_fim=None,
+                    capturado=None, mudou_tipo=None, sla=None):
     url = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
-    q  = """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
-                   data_abertura,data_fechamento,sla_status,
-                   capturado_por,log_edicoes,historico_reaberturas
-            FROM ordens_servico WHERE true"""
+    q  = "SELECT COUNT(*) FROM ordens_servico WHERE true"
     pr = []
-    if status:               q += " AND status = %s";              pr.append(status)
-    if resp_nome:            q += " AND responsavel = %s";         pr.append(resp_nome)
-    if d_ini:                q += " AND data_abertura >= %s";      pr.append(d_ini)
-    if d_fim:                q += " AND data_abertura <= %s";      pr.append(d_fim)
-    if capturado:            q += " AND capturado_por = %s";       pr.append(capturado)
-    if sla == "fora":        q += " AND sla_status = 'fora'"
+    if status:     q += " AND status = %s";              pr.append(status)
+    if resp_nome:  q += " AND responsavel = %s";         pr.append(resp_nome)
+    if d_ini:      q += " AND data_abertura >= %s";      pr.append(d_ini)
+    if d_fim:      q += " AND data_abertura <= %s";      pr.append(d_fim)
+    if capturado:  q += " AND capturado_por = %s";       pr.append(capturado)
+    if sla == "fora": q += " AND sla_status = 'fora'"
     if mudou_tipo == "sim":
         q += " AND ( (log_edicoes IS NOT NULL AND log_edicoes <> '') \
                      OR (historico_reaberturas IS NOT NULL AND historico_reaberturas <> '') )"
     elif mudou_tipo == "nao":
         q += " AND ( (log_edicoes IS NULL OR log_edicoes = '') \
                      AND (historico_reaberturas IS NULL OR historico_reaberturas = '') )"
-    q += " ORDER BY id DESC"
-
-    if limit is not None:
-        q += " LIMIT %s"
-        pr.append(limit)
-    if offset is not None:
-        q += " OFFSET %s"
-        pr.append(offset)
-
     try:
         with psycopg2.connect(url) as conn, conn.cursor() as cur:
-            cur.execute(q, tuple(pr)); rows = cur.fetchall()
+            cur.execute(q, tuple(pr))
+            total = cur.fetchone()[0]
+            return total
     except Exception as e:
-        print("DB ERRO:", e); return []
+        print("DB ERRO (contagem):", e)
+        return 0
 
     tz  = pytz.timezone("America/Sao_Paulo")
     fmt = lambda d: d.astimezone(tz).strftime("%d/%m/%Y %H:%M") if d else "-"
