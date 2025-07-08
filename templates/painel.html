@@ -9,7 +9,12 @@
     body { background-color: #f8f9fa; padding: 20px; }
     .card-metric { min-width: 180px; }
     table td, table th { vertical-align: middle; }
-    .modal { display: none; position: fixed; top: 10%; left: 10%; width: 80%; height: 80%; background: white; padding: 20px; border: 2px solid #444; overflow: auto; z-index: 1000; }
+    .modal {
+      display: none; position: fixed; top: 10%; left: 10%;
+      width: 80%; height: 80%; background: white;
+      padding: 20px; border: 2px solid #444;
+      overflow: auto; z-index: 1000;
+    }
     .modal button { margin-bottom: 10px; }
   </style>
 </head>
@@ -43,56 +48,13 @@
         <p class="fs-4 text-danger">{{ metricas.fora_sla }}</p>
       </div>
     </div>
+    <div class="card card-metric shadow-sm">
+      <div class="card-body text-center">
+        <h5 class="card-title">Alteraram Tipo</h5>
+        <p class="fs-4 text-info">{{ metricas.mudaram_tipo }}</p>
+      </div>
+    </div>
   </div>
-
-  <!-- 1️⃣  NOVO CARD  ⬇ -->
-<div class="card card-metric shadow-sm">
-  <div class="card-body text-center">
-    <h5 class="card-title">Alteraram Tipo</h5>
-    <p class="fs-4 text-info">{{ metricas.mudaram_tipo }}</p>
-  </div>
-</div>
-
-<!-- 2️⃣  FILTRO novo “Mudou tipo?” e Select de Capturador -->
-<form ...>
-  ...
-  <div class="col-md-2">
-    <label class="form-label">Capturado por</label>
-    <select name="capturado" class="form-select">
-      <option value="">Todos</option>
-      {% for c in capturadores %}
-        <option value="{{ c }}" {% if filtros.capturado==c %}selected{% endif %}>
-          {{ c }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <div class="col-md-2">
-    <label class="form-label">Mudou Tipo?</label>
-    <select name="mudou_tipo" class="form-select">
-      <option value="">Todos</option>
-      <option value="sim"  {% if filtros.mudou_tipo=='sim' %}selected{% endif %}>Sim</option>
-      <option value="nao"  {% if filtros.mudou_tipo=='nao' %}selected{% endif %}>Não</option>
-    </select>
-  </div>
-  ...
-</form>
-
-<!-- 3️⃣  COLUNA “Capturado por” e Ícone mudança -->
-<thead> ... <th>Capturado por</th><th>Δ Tipo</th> ... </thead>
-<tbody>
-{% for ch in chamados %}
-  <tr>
-    ...
-    <td>{{ ch.capturado_por }}</td>
-    <td class="text-center">
-      {% if ch.mudou_tipo %}<span class="badge bg-info">⚡</span>{% else %}-{% endif %}
-    </td>
-    ...
-  </tr>
-{% endfor %}
-</tbody>
 
   <!-- Filtros -->
   <form method="get" action="/painel" class="row g-3 mb-4">
@@ -118,17 +80,36 @@
     </div>
 
     <div class="col-md-2">
+      <label class="form-label">Capturado por</label>
+      <select name="capturado" class="form-select">
+        <option value="">Todos</option>
+        {% for c in capturadores %}
+          <option value="{{ c }}" {% if filtros.capturado == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Mudou Tipo?</label>
+      <select name="mudou_tipo" class="form-select">
+        <option value="">Todos</option>
+        <option value="sim"  {% if filtros.mudou_tipo == 'sim' %}selected{% endif %}>Sim</option>
+        <option value="nao"  {% if filtros.mudou_tipo == 'nao' %}selected{% endif %}>Não</option>
+      </select>
+    </div>
+
+    <div class="col-md-1">
       <label class="form-label">Data Início</label>
       <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
     </div>
 
-    <div class="col-md-2">
+    <div class="col-md-1">
       <label class="form-label">Data Fim</label>
       <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
     </div>
 
-    <div class="col-md-2 d-flex align-items-end">
-      <button class="btn btn-primary w-100">Filtrar</button>
+    <div class="col-md-12 d-flex justify-content-end">
+      <button class="btn btn-primary w-25 mt-2">Filtrar</button>
     </div>
   </form>
 
@@ -141,6 +122,8 @@
           <th>Tipo</th>
           <th>Status</th>
           <th>Responsável</th>
+          <th>Capturado por</th>
+          <th>Δ Tipo</th>
           <th>Abertura</th>
           <th>Encerramento</th>
           <th>SLA</th>
@@ -154,6 +137,14 @@
           <td>{{ ch.tipo_ticket }}</td>
           <td>{{ ch.status }}</td>
           <td>{{ ch.responsavel }}</td>
+          <td>{{ ch.capturado_por }}</td>
+          <td class="text-center">
+            {% if ch.mudou_tipo %}
+              <span class="badge bg-info">⚡</span>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
           <td>{{ ch.abertura }}</td>
           <td>{{ ch.fechamento }}</td>
           <td>
