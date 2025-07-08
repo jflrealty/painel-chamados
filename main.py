@@ -1,25 +1,32 @@
-# main.py  – Painel de Chamados v4
-import os, psycopg2, math, datetime as dt, pytz
+# main.py – Painel de Chamados v5 (rápido!)
+import os, math, datetime as dt, pytz
 from urllib.parse import urlencode
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient, errors as slack_err
-from export import export_router
-from utils.db_helpers import carregar_chamados, contar_chamados
 
+from export import export_router
+from utils.db_helpers import (
+    carregar_chamados,
+    contar_chamados,
+    listar_responsaveis,
+    listar_capturadores,
+)
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
-# ───────────────  FASTAPI & TEMPLATES  ───────────────
+# ─────────── FASTAPI & TEMPLATES ───────────
 app = FastAPI()
 app.include_router(export_router)
+
 templates = Jinja2Templates(directory="templates")
 templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
 
-# ───────────────  SLACK  ───────────────
+# ─────────── SLACK ───────────
 slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
-# ═══════════════════ ROTAS ════════════════════════════
+# ═════════════════ ROTAS ═════════════════
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(
     request:      Request,
@@ -37,41 +44,47 @@ async def painel(
     so_sla: bool | None = None,
     so_mud: bool | None = None,
 ):
-    # ► clique nos cards aplica filtro automático
+    # ------------ filtros vindos dos cards ------------
     if so_ema: status, sla, mudou_tipo = "Em Atendimento", None, None
     if so_fin: status, sla, mudou_tipo = "Finalizado",     None, None
     if so_sla: sla,    status          = "fora",           None
     if so_mud: mudou_tipo, status      = "sim",            None
 
-    chamados_full = carregar_chamados(
-        status, responsavel, data_ini, data_fim,
-        capturado, mudou_tipo, sla
+    base_filtros = dict(
+        status=status, resp=responsavel,
+        d_ini=data_ini, d_fim=data_fim,
+        capturado=capturado, mudou_tipo=mudou_tipo, sla=sla
     )
-    metricas = calcular_metricas(chamados_full)
 
-# paginação otimizada ----------------------------
-PER_PAGE = 50
-total = contar_chamados(status, responsavel, data_ini, data_fim,
-                         capturado, mudou_tipo, sla)
+    # ------------ paginação rápida ------------
+    PER_PAGE = 50
+    total = contar_chamados(**base_filtros)
+    paginas_totais = max(1, math.ceil(total / PER_PAGE))
+    page = max(1, min(page, paginas_totais))
 
-paginas_totais = max(1, math.ceil(total / PER_PAGE))
-page = max(1, min(page, paginas_totais))
-ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
+    ini = (page - 1) * PER_PAGE
+    chamados = carregar_chamados(limit=PER_PAGE, offset=ini, **base_filtros)
 
-# agora sim só busca os dados da página atual
-chamados = carregar_chamados(
-    status, responsavel, data_ini, data_fim,
-    capturado, mudou_tipo, sla,
-    limit=PER_PAGE, offset=ini
-)
-    # query-string p/ paginação ----------------------------------------
-    filtros_dict = {
+    # ------------ selects ------------
+    responsaveis  = listar_responsaveis(**base_filtros)
+    capturadores  = listar_capturadores(**base_filtros)
+
+    # ------------ métricas (usa dados da página? não – usa total) ------------
+    metricas = {
+        "total":          total,
+        "em_atendimento": contar_chamados(status="Em Atendimento", **base_filtros),
+        "finalizados":    contar_chamados(status="Finalizado", **base_filtros),
+        "fora_sla":       contar_chamados(sla="fora", **base_filtros),
+        "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **base_filtros),
+    }
+
+    # ------------ query-string para links ------------
+    filtros_qs = urlencode({k: v for k, v in {
         "status": status, "responsavel": responsavel,
         "data_ini": data_ini, "data_fim": data_fim,
         "capturado": capturado, "mudou_tipo": mudou_tipo,
         "sla": sla
-    }
-    filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v})
+    }.items() if v})
 
     return templates.TemplateResponse(
         "painel.html",
@@ -82,14 +95,19 @@ chamados = carregar_chamados(
             "pagina_atual":   page,
             "paginas_totais": paginas_totais,
             "url_paginacao":  f"/painel?{filtros_qs}",
-            "filtros":        filtros_dict,
+            "filtros":        {
+                "status": status, "responsavel": responsavel,
+                "data_ini": data_ini, "data_fim": data_fim,
+                "capturado": capturado, "mudou_tipo": mudou_tipo,
+                "sla": sla
+            },
             "responsaveis":   responsaveis,
             "capturadores":   capturadores,
             "filtros_as_query": filtros_qs,
         },
     )
 
-# ------------------ thread ---------------------------
+# ------------------------ THREAD ------------------------
 @app.post("/thread")
 async def thread(request: Request):
     form       = await request.form()
@@ -98,18 +116,25 @@ async def thread(request: Request):
 
     mensagens = []
     try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-        raw  = resp.get("messages", [])
-        tz   = pytz.timezone("America/Sao_Paulo")
-        for i, m in enumerate(raw):
-            texto = formatar_texto_slack(m.get("text", ""))
-            ts    = dt.datetime.fromtimestamp(float(m["ts"])).astimezone(tz).strftime("%d/%m/%Y %H:%M")
-            user  = traduzir_usuario(m.get("user"))
-            mensagens.append({"texto": texto, "ts": ts, "user": user, "orig": i == 0})
+        resp = slack_client.conversations_replies(
+            channel=canal_id, ts=thread_ts, limit=200
+        )
+        tz = pytz.timezone("America/Sao_Paulo")
+        for i, m in enumerate(resp.get("messages", [])):
+            mensagens.append({
+                "texto": formatar_texto_slack(m.get("text", "")),
+                "ts": dt.datetime.fromtimestamp(
+                    float(m["ts"])
+                ).astimezone(tz).strftime("%d/%m/%Y %H:%M"),
+                "user": get_real_name(m.get("user")) or "<não capturado>",
+                "orig": i == 0
+            })
     except slack_err.SlackApiError as e:
         print("Slack API:", e.response["error"])
 
-    return templates.TemplateResponse("thread.html", {"request": request, "mensagens": mensagens})
+    return templates.TemplateResponse(
+        "thread.html", {"request": request, "mensagens": mensagens}
+    )
 
 # ═════════════════════ HELPERS ═══════════════════════
 def traduzir_usuario(uid: str) -> str:
