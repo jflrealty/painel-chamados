@@ -8,6 +8,7 @@ from utils.slack_helpers import get_real_name
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+templates.env.globals['get_real_name'] = get_real_name
 
 # ─────────── Slack ───────────
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
