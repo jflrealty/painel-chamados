@@ -72,10 +72,10 @@ async def painel(
     # ── Métricas globais ──
     metricas = {
         "total":          total,
-        "em_atendimento": contar_chamados(status="Em Atendimento", **base_filtros),
-        "finalizados":    contar_chamados(status="Finalizado", **base_filtros),
-        "fora_sla":       contar_chamados(sla="fora", **base_filtros),
-        "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **base_filtros),
+        "em_atendimento": contar_chamados(**{**base_filtros, "status": "Em Atendimento"}),
+        "finalizados":    contar_chamados(**{**base_filtros, "status": "Finalizado"}),
+        "fora_sla":       contar_chamados(**{**base_filtros, "sla": "fora"}),
+        "mudaram_tipo":   contar_chamados(**{**base_filtros, "mudou_tipo": "sim"}),
     }
 
     filtros_qs = urlencode({k: v for k, v in {
