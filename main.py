@@ -12,7 +12,9 @@ from utils.slack_helpers import get_real_name   # função já existente
 # ───────────────  FASTAPI & TEMPLATES  ───────────────
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-templates.env.globals["get_real_name"] = get_real_name   # uso direto no Jinja
+templates.env.globals["get_real_name"] = get_real_name
+templates.env.globals["max"] = max
+templates.env.globals["min"] = min           
 
 # ───────────────  SLACK  ───────────────
 slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
