@@ -1,170 +1,181 @@
-# main.py  – Painel de Chamados v2
-import os, psycopg2, datetime as dt, pytz, math
-from urllib.parse import urlencode
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Painel de Chamados</title>
 
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
 
-from utils.slack_helpers import get_real_name          # sua função já pronta
+  <style>
+    body          { background:#f8f9fa; padding:20px }
+    .card-metric  { min-width:180px; cursor:pointer; text-decoration:none; color:inherit }
+    table td,th   { vertical-align:middle }
+    .modal-thread { display:none; position:fixed; top:10%; left:10%; width:80%; height:80%;
+                    background:#fff; padding:20px; border:2px solid #444; overflow:auto; z-index:1000 }
+  </style>
+</head>
+<body>
 
-# ──────────────────────────── FastAPI / Templates ────────────────────────────
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
-templates.env.globals["get_real_name"] = get_real_name  # p/ usar no Jinja
+  <!-- Botão “Home” -->
+  <div class="mb-3">
+    <a class="btn btn-outline-dark" href="/painel">🏠 Home</a>
+  </div>
 
-# ──────────────────────────── Slack Client ────────────────────────────
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
-slack_client     = WebClient(token=SLACK_BOT_TOKEN)
+  <h2 class="mb-4">Painel de Chamados</h2>
 
-# ═════════════════════════════ Rotas ══════════════════════════════════
-@app.get("/painel", response_class=HTMLResponse)
-async def painel(
-    request: Request,
-    page:        int  | None = 1,
-    status:      str | None = None,
-    responsavel: str | None = None,
-    data_ini:    str | None = None,
-    data_fim:    str | None = None,
-    capturado:   str | None = None,
-    mudou_tipo:  str | None = None,
-    sla:         str | None = None
-):
-    # ← flags extras dos cards clicáveis
-    so_total = request.query_params.get("so_total")
-    so_ema   = request.query_params.get("so_ema")
-    so_fin   = request.query_params.get("so_fin")
-    so_sla   = request.query_params.get("so_sla")
-    so_mud   = request.query_params.get("so_mud")
+  <!-- ░░░ Cards Métricas ░░░ -->
+  <div class="d-flex flex-wrap gap-4 mb-4">
+    {% for key,label,color,qs in [
+        ('total','Total','',        'page=1'),                              # total = home
+        ('em_atendimento','Em Atendimento','warning','so_ema=1'),
+        ('finalizados','Finalizados','success',     'so_fin=1'),
+        ('fora_sla','Fora do SLA','danger',        'so_sla=1'),
+        ('mudaram_tipo','Alteraram&nbsp;Tipo','info','so_mud=1')
+      ] %}
+      <a href="/painel?{{ qs }}" class="card card-metric shadow-sm text-center">
+        <div class="card-body">
+          <h6 class="card-title">{{ label|safe }}</h6>
+          <p class="fs-4 text-{{ color }}">{{ metricas[key] }}</p>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
 
-    # se clicou em algum card, aplicamos filtro automático
-    if so_ema:  status = "Em Atendimento"
-    if so_fin:  status = "Finalizado"
-    if so_sla:  sla    = "fora"
-    if so_mud:  mudou_tipo = "sim"
+  <!-- ░░░ Filtros ░░░ -->
+  <form method="get" action="/painel" class="row g-3 mb-4">
+    <!-- Status -->
+    <div class="col-md-2">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        {% for s in ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
+          <option value="{{ s }}" {% if filtros.status==s %}selected{% endif %}>
+            {{ 'Todos' if not s else s }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <!-- Responsável -->
+    <div class="col-md-2">
+      <label class="form-label">Responsável</label>
+      <select name="responsavel" class="form-select">
+        <option value="">Todos</option>
+        {% for r in responsaveis %}
+          <option value="{{ r }}" {% if filtros.responsavel==r %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <!-- Capturado por -->
+    <div class="col-md-2">
+      <label class="form-label">Capturado por</label>
+      <select name="capturado" class="form-select">
+        <option value="">Todos</option>
+        {% for c in capturadores %}
+          <option value="{{ c }}" {% if filtros.capturado==c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <!-- Mudou Tipo -->
+    <div class="col-md-2">
+      <label class="form-label">Mudou Tipo?</label>
+      <select name="mudou_tipo" class="form-select">
+        <option value=""    {% if not filtros.mudou_tipo %}selected{% endif %}>Todos</option>
+        <option value="sim" {% if filtros.mudou_tipo=='sim' %}selected{% endif %}>Sim</option>
+        <option value="nao" {% if filtros.mudou_tipo=='nao' %}selected{% endif %}>Não</option>
+      </select>
+    </div>
+    <!-- Datas -->
+    <div class="col-md-2">
+      <label class="form-label">Data Início</label>
+      <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Data Fim</label>
+      <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
+    </div>
+    <div class="col-12 d-flex justify-content-end">
+      <button class="btn btn-primary mt-2">Filtrar</button>
+    </div>
+  </form>
 
-    chamados_full = carregar_chamados_do_banco(
-        status, responsavel, data_ini, data_fim, capturado, mudou_tipo, sla
-    )
+  <!-- ░░░ Tabela ░░░ -->
+  <div class="table-responsive">
+    <table class="table table-bordered table-striped bg-white shadow-sm">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th><th>Tipo</th><th>Status</th><th>Responsável</th>
+          <th>Abertura</th><th>Encerramento</th>
+          <th>SLA</th><th>Capturado por</th><th>Δ Tipo</th><th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for ch in chamados %}
+        <tr>
+          <td>{{ ch.id }}</td>
+          <td>{{ ch.tipo_ticket }}</td>
+          <td>{{ ch.status }}</td>
+          <td>{{ ch.responsavel }}</td>
+          <td>{{ ch.abertura }}</td>
+          <td>{{ ch.fechamento }}</td>
+          <td class="text-center">
+            {% if ch.sla|lower == 'dentro do sla' %}
+              <span class="badge bg-success">✔</span>
+            {% elif ch.sla|lower == 'fora' or ch.sla|lower == 'fora do sla' %}
+              <span class="badge bg-danger">✘</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if ch.capturado_por == "<não capturado>" %}
+              <i>&lt;não capturado&gt;</i>
+            {% else %}
+              {{ ch.capturado_por }}
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if ch.mudou_tipo %}<span class="badge bg-info">⚡</span>{% else %}-{% endif %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary"
+                    onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">
+              Ver Thread
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
-    metricas = calcular_metricas(chamados_full)
+  <!-- Paginação -->
+  {% if paginas_totais > 1 %}
+  <nav class="mt-4">
+    <ul class="pagination justify-content-center">
+      {% for p in range(max(1, pagina_atual-2), min(paginas_totais+1, pagina_atual+3)) %}
+        <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+          <a class="page-link" href="{{ url_paginacao }}&page={{ p }}">{{ p }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
 
-    PER_PAGE = 50
-    total    = len(chamados_full)
-    total_pg = max(1, math.ceil(total / PER_PAGE))
-    page     = max(1, min(page, total_pg))
-    ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
-    chamados = chamados_full[ini:fim]
+  <!-- ░░░ Modal Thread ░░░ -->
+  <div id="modal" class="modal-thread">
+    <button class="btn btn-secondary mb-2" onclick="fecharModal()">Fechar</button>
+    <div id="modal-content"></div>
+  </div>
 
-    todos_resp  = sorted({c["responsavel"]    for c in chamados_full if c["responsavel"]})
-    todos_capts = sorted({c["capturado_por"]  for c in chamados_full
-                          if c["capturado_por"] and c["capturado_por"] != "<não capturado>"})
-
-    filtros = {
-        "status": status, "responsavel": responsavel,
-        "data_ini": data_ini, "data_fim": data_fim,
-        "capturado": capturado, "mudou_tipo": mudou_tipo,
-        "sla": sla
+  <script>
+    async function verThread(canal, ts){
+      const fd  = new FormData();
+      fd.append("canal_id", canal);
+      fd.append("thread_ts", ts);
+      const rsp = await fetch("/thread", {method:"POST", body:fd});
+      document.getElementById("modal-content").innerHTML = await rsp.text();
+      document.getElementById("modal").style.display = "block";
     }
-    filtros_qs = urlencode({k: v for k, v in filtros.items() if v})
-
-    return templates.TemplateResponse(
-        "painel.html",
-        {
-            "request": request,
-            "chamados": chamados,
-            "metricas": metricas,
-            "pagina_atual": page,
-            "paginas_totais": total_pg,
-            "url_paginacao": f"/painel?{filtros_qs}",
-            "filtros": filtros,
-            "responsaveis": todos_resp,
-            "capturadores": todos_capts
-        }
-    )
-
-# ---------------------- thread (inalterada – apenas formatação) ------------
-@app.post("/thread")
-async def thread(request: Request):
-    form       = await request.form()
-    canal_id   = form["canal_id"]
-    thread_ts  = form["thread_ts"]
-
-    mensagens = []
-    try:
-        print(f"🔎 Buscando thread: canal={canal_id}, ts={thread_ts}")
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-        mensagens = resp.get("messages", [])
-        print(f"✅ {len(mensagens)} mensagens encontradas")
-    except SlackApiError as e:
-        print("❌ Slack API:", e.response["error"])
-    except Exception as e:
-        print("❌ Erro inesperado:", e)
-
-    return templates.TemplateResponse("thread.html", {
-        "request": request,
-        "mensagens": mensagens
-    })
-
-# ═════════════════════ Helpers DB / Métricas ═════════════════════════
-def carregar_chamados_do_banco(
-    status=None, resp_nome=None, d_ini=None, d_fim=None,
-    capturado=None, mudou_tipo=None, sla=None
-):
-    url = os.getenv("DATABASE_PUBLIC_URL", "")
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgres://", 1)
-
-    q = """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
-                  data_abertura,data_fechamento,sla_status,
-                  capturado_por,log_edicoes,historico_reaberturas
-           FROM ordens_servico WHERE true"""
-    pr = []
-
-    if status:                    q += " AND status = %s";             pr.append(status)
-    if resp_nome:                 q += " AND responsavel = %s";        pr.append(resp_nome)
-    if d_ini:                     q += " AND data_abertura >= %s";     pr.append(d_ini)
-    if d_fim:                     q += " AND data_abertura <= %s";     pr.append(d_fim)
-    if capturado:                 q += " AND capturado_por = %s";      pr.append(capturado)
-    if sla == "fora":             q += " AND sla_status = 'fora'"
-    if mudou_tipo == "sim":       q += " AND log_edicoes IS NOT NULL AND log_edicoes <> ''"
-    elif mudou_tipo == "nao":     q += " AND (log_edicoes IS NULL OR log_edicoes = '')"
-
-    q += " ORDER BY id DESC"
-
-    try:
-        with psycopg2.connect(url) as conn, conn.cursor() as cur:
-            cur.execute(q, tuple(pr))
-            rows = cur.fetchall()
-    except Exception as e:
-        print("⚠️ banco:", e); return []
-
-    tz  = pytz.timezone("America/Sao_Paulo")
-    fmt = lambda d: d.astimezone(tz).strftime("%d/%m/%Y às %Hh%M") if d else "-"
-    user = lambda uid: get_real_name(uid) or "<não capturado>"
-
-    return [
-        {
-            "id": r[0],
-            "tipo_ticket": r[1],
-            "status": r[2].lower(),
-            "responsavel": get_real_name(r[3]) or r[3],
-            "canal_id": r[4], "thread_ts": r[5],
-            "abertura": fmt(r[6]), "fechamento": fmt(r[7]),
-            "sla": r[8] or "-",
-            "capturado_por": user(r[9]),
-            "mudou_tipo": bool(r[10]) or bool(r[11]),
-        }
-        for r in rows
-    ]
-
-def calcular_metricas(ch):
-    return {
-        "total":          len(ch),
-        "em_atendimento": sum(c["status"] in ("aberto", "em atendimento") for c in ch),
-        "finalizados":    sum(c["status"] in ("fechado", "finalizado")    for c in ch),
-        "fora_sla":       sum(c["sla"] == "fora"                          for c in ch),
-        "mudaram_tipo":   sum(c["mudou_tipo"]                             for c in ch)
-    }
+    function fecharModal(){ document.getElementById("modal").style.display = "none"; }
+  </script>
+</body>
+</html>
