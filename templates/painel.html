@@ -1,44 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
   <meta charset="utf-8">
   <title>Painel de Chamados</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Bootstrap 5 -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <!-- (Opcional) Seu CSS extra -->
+  <link rel="stylesheet" href="/static/styles.css">
+
   <style>
-    body { background:#f8f9fa;padding:20px }
-    .card-metric{min-width:180px}
-    table td,table th{vertical-align:middle}
-    .modal{display:none;position:fixed;top:10%;left:10%;width:80%;height:80%;background:#fff;padding:20px;border:2px solid #444;overflow:auto;z-index:1000}
+    body            { background:#f8f9fa; padding:20px }
+    .card-metric    { min-width:180px }
+    table td,th     { vertical-align:middle }
+    .modal-thread   { display:none; position:fixed; top:10%; left:10%;
+                      width:80%; height:80%; background:#fff; padding:20px;
+                      border:2px solid #444; overflow:auto; z-index:1000 }
   </style>
 </head>
 <body>
+
   <h2 class="mb-4">Painel de Chamados</h2>
 
-  <!-- MÉTRICAS -->
-  <div class="d-flex gap-4 mb-4 flex-wrap">
-    {% for label, val, cls in [
-        ('Total', metricas.total, ''),
-        ('Em Atendimento', metricas.em_atendimento, 'text-warning'),
-        ('Finalizados', metricas.finalizados, 'text-success'),
-        ('Fora do SLA', metricas.fora_sla, 'text-danger'),
-        ('Com Histórico', metricas.com_historico, 'text-info')] %}
+  <!-- ░░░░░  MÉTRICAS  ░░░░░ -->
+  <div class="d-flex flex-wrap gap-4 mb-4">
+    {% for key,label,color in [
+        ('total','Total',''),
+        ('em_atendimento','Em Atendimento','warning'),
+        ('finalizados','Finalizados','success'),
+        ('fora_sla','Fora do SLA','danger'),
+        ('mudaram_tipo','Alteraram&nbsp;Tipo','info')
+      ] %}
       <div class="card card-metric shadow-sm">
         <div class="card-body text-center">
-          <h5 class="card-title">{{label}}</h5>
-          <p class="fs-4 {{cls}}">{{val}}</p>
+          <h6 class="card-title">{{ label|safe }}</h6>
+          <p class="fs-4 text-{{ color }}">{{ metricas[key] }}</p>
         </div>
       </div>
     {% endfor %}
   </div>
 
-  <!-- FILTROS -->
+  <!-- ░░░░░  FILTROS  ░░░░░ -->
   <form method="get" action="/painel" class="row g-3 mb-4">
     <!-- Status -->
     <div class="col-md-2">
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
-        {% for s in ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
-          <option value="{{s}}" {% if filtros.status==s %}selected{% endif %}>
+        {% set sts = ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
+        {% for s in sts %}
+          <option value="{{ s }}" {% if filtros.status==s %}selected{% endif %}>
             {{ 'Todos' if not s else s }}
           </option>
         {% endfor %}
@@ -51,7 +65,7 @@
       <select name="responsavel" class="form-select">
         <option value="">Todos</option>
         {% for r in responsaveis %}
-          <option value="{{r}}" {% if filtros.responsavel==r %}selected{% endif %}>{{r}}</option>
+          <option value="{{ r }}" {% if filtros.responsavel==r %}selected{% endif %}>{{ r }}</option>
         {% endfor %}
       </select>
     </div>
@@ -62,71 +76,69 @@
       <select name="capturado" class="form-select">
         <option value="">Todos</option>
         {% for c in capturadores %}
-          <option value="{{c}}" {% if filtros.capturado==c %}selected{% endif %}>{{c}}</option>
+          <option value="{{ c }}" {% if filtros.capturado==c %}selected{% endif %}>{{ c }}</option>
         {% endfor %}
       </select>
     </div>
 
-    <!-- Histórico -->
+    <!-- Mudou Tipo -->
     <div class="col-md-2">
-      <label class="form-label">Histórico</label>
-      <select name="historico" class="form-select">
-        <option value=""      {% if not filtros.historico %}selected{% endif %}>Todos</option>
-        <option value="sim"   {% if filtros.historico=='sim' %}selected{% endif %}>Com histórico</option>
-        <option value="nao"   {% if filtros.historico=='nao' %}selected{% endif %}>Sem histórico</option>
+      <label class="form-label">Mudou Tipo?</label>
+      <select name="mudou_tipo" class="form-select">
+        <option value=""      {% if not filtros.mudou_tipo %}selected{% endif %}>Todos</option>
+        <option value="sim"   {% if filtros.mudou_tipo=='sim' %}selected{% endif %}>Sim</option>
+        <option value="nao"   {% if filtros.mudou_tipo=='nao' %}selected{% endif %}>Não</option>
       </select>
     </div>
 
     <!-- Datas -->
     <div class="col-md-2">
-      <label class="form-label">Início</label>
-      <input type="date" name="data_ini" class="form-control" value="{{filtros.data_ini or ''}}">
+      <label class="form-label">Data Início</label>
+      <input type="date"  name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
     </div>
     <div class="col-md-2">
-      <label class="form-label">Fim</label>
-      <input type="date" name="data_fim" class="form-control" value="{{filtros.data_fim or ''}}">
+      <label class="form-label">Data Fim</label>
+      <input type="date"  name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
     </div>
 
     <div class="col-12 d-flex justify-content-end">
-      <button class="btn btn-primary">Filtrar</button>
+      <button class="btn btn-primary mt-2">Filtrar</button>
     </div>
   </form>
 
-  <!-- TABELA -->
+  <!-- ░░░░░  TABELA  ░░░░░ -->
   <div class="table-responsive">
     <table class="table table-bordered table-striped bg-white shadow-sm">
       <thead class="table-light">
         <tr>
           <th>ID</th><th>Tipo</th><th>Status</th><th>Responsável</th>
-          <th>Capturado por</th><th>Abertura</th><th>Encerramento</th>
-          <th>SLA</th><th class="text-center">Hist</th><th>Ação</th>
+          <th>Abertura</th><th>Encerramento</th>
+          <th>SLA</th><th>Capturado por</th><th>Δ Tipo</th><th>Ação</th>
         </tr>
       </thead>
       <tbody>
       {% for ch in chamados %}
         <tr>
-          <td>{{ch.id}}</td>
-          <td>{{ch.tipo_ticket}}</td>
-          <td>{{ch.status}}</td>
-          <td>{{ch.responsavel}}</td>
-          <td>{{ch.capturado_por}}</td>
-          <td>{{ch.abertura}}</td>
-          <td>{{ch.fechamento}}</td>
+          <td>{{ ch.id }}</td>
+          <td>{{ ch.tipo_ticket }}</td>
+          <td>{{ ch.status }}</td>
+          <td>{{ ch.responsavel }}</td>
+          <td>{{ ch.abertura }}</td>
+          <td>{{ ch.fechamento }}</td>
           <td class="text-center">
-            {% if ch.sla.lower().startswith('fora') %}
-              <span class="badge bg-danger">✘</span>
-            {% elif ch.sla.lower().startswith('dentro') %}
+            {% if ch.sla|lower == 'dentro do sla' %}
               <span class="badge bg-success">✔</span>
-            {% else %}
-              -
-            {% endif %}
+            {% elif ch.sla|lower == 'fora do sla' %}
+              <span class="badge bg-danger">✘</span>
+            {% else %}-{% endif %}
           </td>
+          <td>{{ ch.capturado_por }}</td>
           <td class="text-center">
-            {% if ch.historico %}<span class="badge bg-info">⚡</span>{% else %}-{% endif %}
+            {% if ch.mudou_tipo %}<span class="badge bg-info">⚡</span>{% else %}-{% endif %}
           </td>
           <td>
             <button class="btn btn-sm btn-outline-primary"
-                    onclick="verThread('{{ch.canal_id}}','{{ch.thread_ts}}')">
+                    onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">
               Ver Thread
             </button>
           </td>
@@ -136,22 +148,24 @@
     </table>
   </div>
 
-  <!-- MODAL -->
-  <div id="modal" class="modal">
-    <button class="btn btn-secondary" onclick="document.getElementById('modal').style.display='none'">Fechar</button>
+  <!-- ░░░░░  MODAL THREAD  ░░░░░ -->
+  <div id="modal" class="modal-thread">
+    <button class="btn btn-secondary" onclick="fecharModal()">Fechar</button>
     <div id="modal-content"></div>
   </div>
 
   <script>
     async function verThread(canal, ts){
-      const form = new FormData();
-      form.append("canal_id", canal);
-      form.append("thread_ts", ts);
+      const fd = new FormData();
+      fd.append("canal_id", canal);
+      fd.append("thread_ts", ts);
 
-      const res  = await fetch("/thread", {method:"POST", body:form});
-      const html = await res.text();
-      document.getElementById("modal-content").innerHTML = html;
+      const resp = await fetch("/thread", {method:"POST", body:fd});
+      document.getElementById("modal-content").innerHTML = await resp.text();
       document.getElementById("modal").style.display = "block";
+    }
+    function fecharModal(){
+      document.getElementById("modal").style.display = "none";
     }
   </script>
 </body>
