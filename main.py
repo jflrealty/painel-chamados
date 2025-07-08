@@ -75,8 +75,8 @@ async def painel(
 
     metricas = {
         "total": contar_chamados(**base_filtros),
-        "em_atendimento": contar_chamados(status="Em Atendimento", **filtros_para_metricas),
-        "finalizados":    contar_chamados(status="Finalizado", **filtros_para_metricas),
+        "em_atendimento": contar_chamados(status="aberto", **filtros_para_metricas),
+        "finalizados":    contar_chamados(status="fechado", **filtros_para_metricas),
         "fora_sla":       contar_chamados(sla="fora", **filtros_para_metricas),
         "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **filtros_para_metricas),
     }
