@@ -42,6 +42,7 @@ EMOJI_MAP = {
     ":rocket:": "🚀",
     ":boom:": "💥",
     ":arrows_counterclockwise:": "🔄",
+    ":recycle:": "♻️",
     # …adicione mais se quiser
 }
 
