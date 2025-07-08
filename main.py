@@ -5,11 +5,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient, errors as slack_err
+from export import export_router
+from utils.db_helpers import carregar_chamados 
 
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
 # ───────────────  FASTAPI & TEMPLATES  ───────────────
 app = FastAPI()
+app.include_router(export_router)
 templates = Jinja2Templates(directory="templates")
 templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
 
