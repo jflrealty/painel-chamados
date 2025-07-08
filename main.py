@@ -1,4 +1,4 @@
-# main.py – Painel de Chamados v5-fix
+# main.py – Painel de Chamados v5-fix-FINAL
 import os, math, datetime as dt, pytz
 from urllib.parse import urlencode
 
@@ -26,7 +26,7 @@ templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
 # ─────────── Slack ───────────
 slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
-# ═════════════════════════════ ROTAS ═════════════════════════════
+# ═════════════════ ROTAS ═════════════════
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(
     request:      Request,
@@ -38,17 +38,17 @@ async def painel(
     capturado:    str  | None = None,
     mudou_tipo:   str  | None = None,
     sla:          str  | None = None,
-    # atalhos dos cards
+    # Atalhos dos cards
     so_ema: bool | None = None,
     so_fin: bool | None = None,
     so_sla: bool | None = None,
     so_mud: bool | None = None,
 ):
-    # ── filtros disparados pelos cards ──
-    if so_ema:  status, sla,  mudou_tipo = "Em Atendimento", None, None
-    if so_fin:  status, sla,  mudou_tipo = "Finalizado",     None, None
-    if so_sla:  sla,    status           = "fora",           None
-    if so_mud:  mudou_tipo, status       = "sim",            None
+    # ── Filtros disparados pelos cards ──
+    if so_ema: status, sla,  mudou_tipo = "Em Atendimento", None, None
+    if so_fin: status, sla,  mudou_tipo = "Finalizado",     None, None
+    if so_sla: sla,    status           = "fora",           None
+    if so_mud: mudou_tipo, status       = "sim",            None
 
     base_filtros = dict(
         status=status, resp=responsavel,
@@ -56,8 +56,8 @@ async def painel(
         capturado=capturado, mudou_tipo=mudou_tipo, sla=sla
     )
 
-    # ── paginação enxuta ──
-    PER_PAGE = 50
+    # ── Paginação enxuta ──
+    PER_PAGE       = 50
     total          = contar_chamados(**base_filtros)
     paginas_totais = max(1, math.ceil(total / PER_PAGE))
     page           = max(1, min(page, paginas_totais))
@@ -65,11 +65,11 @@ async def painel(
 
     chamados = carregar_chamados(limit=PER_PAGE, offset=offset, **base_filtros)
 
-    # ── selects p/ combos ──
-    responsaveis  = listar_responsaveis(**base_filtros)
-    capturadores  = listar_capturadores(**base_filtros)
+    # ── Combos ──
+    responsaveis = listar_responsaveis(**base_filtros)
+    capturadores = listar_capturadores(**base_filtros)
 
-    # ── métricas globais ──
+    # ── Métricas globais ──
     metricas = {
         "total":          total,
         "em_atendimento": contar_chamados(status="Em Atendimento", **base_filtros),
@@ -106,7 +106,7 @@ async def painel(
         },
     )
 
-# ─────────────────────── THREAD ───────────────────────
+# ───────────────────── THREAD ─────────────────────
 @app.post("/thread")
 async def thread(request: Request):
     form      = await request.form()
@@ -115,8 +115,10 @@ async def thread(request: Request):
 
     mensagens = []
     try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-        tz   = pytz.timezone("America/Sao_Paulo")
+        resp = slack_client.conversations_replies(
+            channel=canal_id, ts=thread_ts, limit=200
+        )
+        tz = pytz.timezone("America/Sao_Paulo")
         for i, m in enumerate(resp.get("messages", [])):
             mensagens.append({
                 "texto": formatar_texto_slack(m.get("text", "")),
@@ -128,5 +130,6 @@ async def thread(request: Request):
     except slack_err.SlackApiError as e:
         print("Slack API:", e.response["error"])
 
-    return templates.TemplateResponse("thread.html",
-                                      {"request": request, "mensagens": mensagens})
+    return templates.TemplateResponse(
+        "thread.html", {"request": request, "mensagens": mensagens}
+    )
