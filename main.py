@@ -83,7 +83,7 @@ async def painel(request: Request,
     metricas = {
         "total":          total,
         "em_atendimento": contar_chamados(status="em análise", **fs),
-        "finalizados":    contar_chamados(status="fechado", **fs),
+        "finalizados":    contar_chamados(**fs, status="fechado"),
         "fora_sla":       contar_chamados(sla="fora", **fs),
         "mudaram_tipo":   contar_chamados(**fs, mudou_tipo="sim"),
     }
