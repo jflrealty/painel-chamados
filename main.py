@@ -53,6 +53,7 @@ async def painel(request: Request,
     filtros_sem_status = dict(filtros)
     filtros_sem_status.pop("status", None)
     filtros_sem_status.pop("sla", None)
+    filtros_sem_status.pop("mudou_tipo", None)
 
     # paginação
     total = contar_chamados(**filtros)
