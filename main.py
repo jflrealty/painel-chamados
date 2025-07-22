@@ -74,7 +74,12 @@ async def painel(request: Request,
     ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
     chamados = carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
 
-    fs = filtros_sem_status  # evitar duplicação
+    fs = dict(filtros_sem_status)  # evitar duplicação
+
+    fs.pop("status", None)
+    fs.pop("sla", None)
+    fs.pop("mudou_tipo", None)
+
     metricas = {
         "total":          total,
         "em_atendimento": contar_chamados(status="em análise", **fs),
