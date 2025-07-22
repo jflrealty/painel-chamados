@@ -29,66 +29,63 @@ slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 # ═════════════════════════ ROTAS ════════════════════════════════
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request,
-                 status: Optional[str] = None,
-                 responsavel: Optional[str] = None,
-                 capturado: Optional[str] = None,
-                 mudou_tipo: Optional[str] = None,
-                 data_ini: Optional[str] = None,
-                 data_fim: Optional[str] = None,
+                 status: str = "Todos",
+                 responsavel: str = "Todos",
+                 capturado: str = "Todos",
+                 mudou_tipo: str = "Todos",
+                 data_ini: str = None,
+                 data_fim: str = None,
                  page: int = 1):
 
-    # Normalizar filtros
-    filtros_dict = {}
+    # Filtros gerais
+    filtros = {}
+    if responsavel != "Todos": filtros["resp"] = responsavel
+    if capturado != "Todos": filtros["capturado"] = capturado
+    if mudou_tipo != "Todos": filtros["mudou_tipo"] = mudou_tipo
+    if data_ini: filtros["d_ini"] = data_ini
+    if data_fim: filtros["d_fim"] = data_fim
 
-    if status and status != "Todos":
-        if status == "Em Atendimento":
-            filtros_dict["status"] = "aberto"
-        elif status == "Finalizados":
-            filtros_dict["status"] = "fechado"
-        else:
-            filtros_dict["status"] = status
-
-    if responsavel and responsavel != "Todos":
-        filtros_dict["responsavel"] = responsavel
-
-    if capturado and capturado != "Todos":
-        filtros_dict["capturado"] = capturado
-
-    if mudou_tipo and mudou_tipo != "Todos":
-        filtros_dict["mudou_tipo"] = mudou_tipo
-
-    if data_ini:
-        filtros_dict["data_ini"] = data_ini
-
-    if data_fim:
-        filtros_dict["data_fim"] = data_fim
+    # Status filtrado diretamente
+    status_card = status
+    if status == "Em Atendimento": filtros["status"] = "aberto"
+    elif status == "Finalizados": filtros["status"] = "fechado"
+    elif status not in ["Todos", "", None]: filtros["status"] = status
 
     # Paginação
-    chamados, total_paginas = carregar_chamados(page=page, **filtros_dict)
+    total = contar_chamados(**filtros)
+    paginas_totais = max(1, math.ceil(total / PER_PAGE))
+    page = max(1, min(page, paginas_totais))
+    offset = (page - 1) * PER_PAGE
 
-    # Cards de métricas
+    chamados = carregar_chamados(limit=PER_PAGE, offset=offset, **filtros)
+
+    # Cards superiores
     try:
-        total = contar_chamados(**filtros_dict)
-        em_atendimento = contar_chamados(status="aberto", **{k: v for k, v in filtros_dict.items() if k != "status"})
-        finalizados = contar_chamados(status="fechado", **{k: v for k, v in filtros_dict.items() if k != "status"})
-        fora_sla = contar_chamados(sla="fora", **filtros_dict)
-        alteraram_tipo = contar_chamados(mudou_tipo="sim", **filtros_dict)
+        filtros_sem_status = {k: v for k, v in filtros.items() if k != "status"}
+        cards = {
+            "total": contar_chamados(**filtros_sem_status),
+            "em_atendimento": contar_chamados(status="aberto", **filtros_sem_status),
+            "finalizados": contar_chamados(status="fechado", **filtros_sem_status),
+            "fora_sla": contar_chamados(sla="fora", **filtros),
+            "alteraram_tipo": contar_chamados(mudou_tipo="sim", **filtros),
+        }
     except Exception as e:
-        print("ERRO NAS MÉTRICAS:", e)
-        total = em_atendimento = finalizados = fora_sla = alteraram_tipo = 0
+        print("ERRO CARDS:", e)
+        cards = {"total": 0, "em_atendimento": 0, "finalizados": 0, "fora_sla": 0, "alteraram_tipo": 0}
 
     return templates.TemplateResponse("painel.html", {
         "request": request,
         "chamados": chamados,
         "pagina": page,
-        "total_paginas": total_paginas,
-        "filtros": filtros_dict,
-        "cards": {
-            "total": total,
-            "em_atendimento": em_atendimento,
-            "finalizados": finalizados,
-            "fora_sla": fora_sla,
-            "alteraram_tipo": alteraram_tipo,
+        "total_paginas": paginas_totais,
+        "cards": cards,
+        "filtros": {
+            "status": status_card,
+            "responsavel": responsavel,
+            "capturado": capturado,
+            "mudou_tipo": mudou_tipo,
+            "data_ini": data_ini,
+            "data_fim": data_fim
         }
     })
 
