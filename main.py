@@ -40,20 +40,25 @@ async def painel(request: Request,
                  page: int = 1):
 
     # filtros preparados
-    filtros = {}
-    if status != "Todos": filtros["status"] = status
-    if responsavel != "Todos": filtros["resp"] = responsavel
-    if capturado != "Todos": filtros["capturado"] = capturado
-    if mudou_tipo != "Todos": filtros["mudou_tipo"] = mudou_tipo
-    if sla != "Todos": filtros["sla"] = sla
-    if data_ini: filtros["d_ini"] = data_ini
-    if data_fim: filtros["d_fim"] = data_fim
+    filtros = {
+        "status":      None if status == "Todos" else status.lower(),
+        "resp":        None if responsavel == "Todos" else responsavel,
+        "capturado":   None if capturado == "Todos" else capturado,
+        "mudou_tipo":  None if mudou_tipo == "Todos" else mudou_tipo,
+        "sla":         None if sla == "Todos" else sla,
+    }
 
-    # filtros sem status/sla – para métricas específicas
-    filtros_sem_status = dict(filtros)
-    filtros_sem_status.pop("status", None)
-    filtros_sem_status.pop("sla", None)
-    filtros_sem_status.pop("mudou_tipo", None)
+    if data_ini:
+        try: filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
+        except: filtros["d_ini"] = None
+
+    if data_fim:
+        try: filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
+        except: filtros["d_fim"] = None
+
+    # filtros sem status/sla/mudou_tipo – para contagens
+    filtros_sem_status = {k: v for k, v in filtros.items()
+                          if k not in ("status", "sla", "mudou_tipo")}
 
     # paginação
     total = contar_chamados(**filtros)
@@ -68,9 +73,10 @@ async def painel(request: Request,
         "em_atendimento": contar_chamados(status="aberto", **filtros_sem_status),
         "finalizados": contar_chamados(status="fechado", **filtros_sem_status),
         "fora_sla": contar_chamados(sla="fora", **filtros_sem_status),
-        "mudaram_tipo": contar_chamados(mudou_tipo="sim", **filtros_sem_status),
+        "mudaram_tipo": contar_chamados(**filtros_sem_status, mudou_tipo="sim"),
     }
 
+    # querystring para paginação/exportação
     filtros_dict = {
         "status": status, "responsavel": responsavel,
         "capturado": capturado, "mudou_tipo": mudou_tipo,
@@ -82,15 +88,15 @@ async def painel(request: Request,
     return templates.TemplateResponse(
         "painel.html",
         {
-            "request":        request,
-            "chamados":       chamados,
-            "metricas":       metricas,
-            "pagina_atual":   page,
+            "request": request,
+            "chamados": chamados,
+            "metricas": metricas,
+            "pagina_atual": page,
             "paginas_totais": paginas_totais,
-            "url_paginacao":  f"/painel?{filtros_qs}",
-            "filtros":        filtros_dict,
-            "responsaveis":   listar_responsaveis(),
-            "capturadores":   listar_capturadores(),
+            "url_paginacao": f"/painel?{filtros_qs}",
+            "filtros": filtros_dict,
+            "responsaveis": listar_responsaveis(),
+            "capturadores": listar_capturadores(),
             "filtros_as_query": filtros_qs,
         },
     )
