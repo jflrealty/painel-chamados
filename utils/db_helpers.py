@@ -18,7 +18,7 @@ def _user(uid: str):         # UID → nome real / placeholder
 def _base_sql():
     return """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
                      data_abertura,data_fechamento,sla_status,
-                     capturado_por,log_edicoes,historico_reaberturas
+                     capturado_por,solicitante,log_edicoes,historico_reaberturas
               FROM ordens_servico WHERE true"""
 
 def _apply_filters(q: str, pr: list,
@@ -68,6 +68,7 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         "abertura": _fmt(r[6]), "fechamento": _fmt(r[7]),
         "sla": (r[8] or "-").lower(),
         "capturado_por": _user(r[9]),
+        "solicitante": _user(r[10]),
         "mudou_tipo": bool(r[10]) or bool(r[11]),
     } for r in rows]
 
