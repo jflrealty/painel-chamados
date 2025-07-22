@@ -22,6 +22,7 @@ app.include_router(export_router)
 
 templates = Jinja2Templates(directory="templates")
 templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
+PER_PAGE = 20
 
 # ── Slack client ────────────────────────────────────────────────
 slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
