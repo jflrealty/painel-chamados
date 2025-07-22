@@ -28,87 +28,69 @@ slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
 # ═════════════════════════ ROTAS ════════════════════════════════
 @app.get("/painel", response_class=HTMLResponse)
-async def painel(
-    request:      Request,
-    page:         int  | None = 1,
-    status:       str  | None = None,
-    responsavel:  str  | None = None,
-    data_ini:     str  | None = None,
-    data_fim:     str  | None = None,
-    capturado:    str  | None = None,
-    mudou_tipo:   str  | None = None,
-    sla:          str  | None = None,
-    # atalhos dos cards
-    so_ema: bool | None = None,
-    so_fin: bool | None = None,
-    so_sla: bool | None = None,
-    so_mud: bool | None = None,
-):
-    # ── filtros disparados pelos cards ──
-    if so_ema:  status, sla,  mudou_tipo = "Em Atendimento", None, None
-    if so_fin:  status, sla,  mudou_tipo = "Finalizado",     None, None
-    if so_sla:  sla,    status           = "fora",           None
-    if so_mud:  mudou_tipo, status       = "sim",            None
+async def painel(request: Request,
+                 status: Optional[str] = None,
+                 responsavel: Optional[str] = None,
+                 capturado: Optional[str] = None,
+                 mudou_tipo: Optional[str] = None,
+                 data_ini: Optional[str] = None,
+                 data_fim: Optional[str] = None,
+                 page: int = 1):
 
-    base_filtros = dict(
-        status=status, resp=responsavel,
-        d_ini=data_ini, d_fim=data_fim,
-        capturado=capturado, mudou_tipo=mudou_tipo, sla=sla
-    )
+    # Normalizar filtros
+    filtros_dict = {}
 
-    # ── paginação ───────────────────────────────────────────────
-    PER_PAGE       = 20
-    total          = contar_chamados(**base_filtros)
-    paginas_totais = max(1, math.ceil(total / PER_PAGE))
-    page           = max(1, min(page, paginas_totais))
-    offset         = (page - 1) * PER_PAGE
+    if status and status != "Todos":
+        if status == "Em Atendimento":
+            filtros_dict["status"] = "aberto"
+        elif status == "Finalizados":
+            filtros_dict["status"] = "fechado"
+        else:
+            filtros_dict["status"] = status
 
-    chamados = carregar_chamados(limit=PER_PAGE, offset=offset, **base_filtros)
+    if responsavel and responsavel != "Todos":
+        filtros_dict["responsavel"] = responsavel
 
-    # ── combos para filtros ─────────────────────────────────────
-    responsaveis = listar_responsaveis(**base_filtros)
-    capturadores = listar_capturadores(**base_filtros)
+    if capturado and capturado != "Todos":
+        filtros_dict["capturado"] = capturado
 
-    # ── métricas globais ───────────────────────────────────────────
-    filtros_para_metricas = {k: v for k, v in base_filtros.items()
-                         if k not in ("status", "sla", "mudou_tipo")}
+    if mudou_tipo and mudou_tipo != "Todos":
+        filtros_dict["mudou_tipo"] = mudou_tipo
 
-    metricas = {
-        "total": contar_chamados(**base_filtros),
-        "em_atendimento": contar_chamados(status="aberto", **filtros_para_metricas),
-        "finalizados":    contar_chamados(status="fechado", **filtros_para_metricas),
-        "fora_sla":       contar_chamados(sla="fora", **filtros_para_metricas),
-        "mudaram_tipo":   contar_chamados(mudou_tipo="sim", **filtros_para_metricas),
-    }
+    if data_ini:
+        filtros_dict["data_ini"] = data_ini
 
-    # ── query-string p/ links & export ──────────────────────────
-    filtros_qs = urlencode({k: v for k, v in {
-        "status": status, "responsavel": responsavel,
-        "data_ini": data_ini, "data_fim": data_fim,
-        "capturado": capturado, "mudou_tipo": mudou_tipo,
-        "sla": sla
-    }.items() if v})
+    if data_fim:
+        filtros_dict["data_fim"] = data_fim
 
-    return templates.TemplateResponse(
-        "painel.html",
-        {
-            "request":        request,
-            "chamados":       chamados,
-            "metricas":       metricas,
-            "pagina_atual":   page,
-            "paginas_totais": paginas_totais,
-            "url_paginacao":  f"/painel?{filtros_qs}",
-            "filtros": {
-                "status": status, "responsavel": responsavel,
-                "data_ini": data_ini, "data_fim": data_fim,
-                "capturado": capturado, "mudou_tipo": mudou_tipo,
-                "sla": sla
-            },
-            "responsaveis":   responsaveis,
-            "capturadores":   capturadores,
-            "filtros_as_query": filtros_qs,
-        },
-    )
+    # Paginação
+    chamados, total_paginas = carregar_chamados(page=page, **filtros_dict)
+
+    # Cards de métricas
+    try:
+        total = contar_chamados(**filtros_dict)
+        em_atendimento = contar_chamados(status="aberto", **{k: v for k, v in filtros_dict.items() if k != "status"})
+        finalizados = contar_chamados(status="fechado", **{k: v for k, v in filtros_dict.items() if k != "status"})
+        fora_sla = contar_chamados(sla="fora", **filtros_dict)
+        alteraram_tipo = contar_chamados(mudou_tipo="sim", **filtros_dict)
+    except Exception as e:
+        print("ERRO NAS MÉTRICAS:", e)
+        total = em_atendimento = finalizados = fora_sla = alteraram_tipo = 0
+
+    return templates.TemplateResponse("painel.html", {
+        "request": request,
+        "chamados": chamados,
+        "pagina": page,
+        "total_paginas": total_paginas,
+        "filtros": filtros_dict,
+        "cards": {
+            "total": total,
+            "em_atendimento": em_atendimento,
+            "finalizados": finalizados,
+            "fora_sla": fora_sla,
+            "alteraram_tipo": alteraram_tipo,
+        }
+    })
 
 # ───────────────────────── THREAD ───────────────────────────────
 @app.post("/thread")
