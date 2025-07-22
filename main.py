@@ -43,7 +43,7 @@ async def painel(request: Request,
     status_map = {
         "Aberto": "aberto",
         "Em Atendimento": "em análise",
-        "Finalizados": "fechado",
+        "Finalizado": "fechado",
         "Cancelado": "cancelado",
         "Todos": None
     }
