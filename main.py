@@ -37,6 +37,7 @@ async def painel(request: Request,
                  data_ini: str = None,
                  data_fim: str = None,
                  sla: str = "Todos",
+                 tipo: str = "Todos",
                  page: int = 1):
 
     # Mapeamento visual → real
@@ -55,6 +56,7 @@ async def painel(request: Request,
         "capturado":   None if capturado == "Todos" else capturado,
         "mudou_tipo":  None if mudou_tipo == "Todos" else mudou_tipo,
         "sla":         None if sla == "Todos" else sla,
+        "tipo_ticket": None if tipo == "Todos" else tipo,
     }
 
     if data_ini:
@@ -92,7 +94,7 @@ async def painel(request: Request,
         "status": status, "responsavel": responsavel,
         "capturado": capturado, "mudou_tipo": mudou_tipo,
         "data_ini": data_ini, "data_fim": data_fim,
-        "sla": sla
+        "sla": sla, "tipo": tipo
     }
     filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v and v != "Todos"})
 
@@ -108,6 +110,7 @@ async def painel(request: Request,
             "filtros":        filtros_dict,
             "responsaveis":   listar_responsaveis(),
             "capturadores":   listar_capturadores(),
+            "tipos":          listar_tipos(),
             "filtros_as_query": filtros_qs,
         },
     )
