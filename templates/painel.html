@@ -88,6 +88,16 @@
     </div>
 
     <div class="col-md-2">
+      <label class="form-label">Tipo de Chamado</label>
+      <select name="tipo" class="form-select">
+        <option value="">Todos</option>
+        {% for t in tipos %}
+          <option value="{{ t }}" {{ 'selected' if filtros.tipo==t else '' }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-2">
       <label class="form-label">Data Início</label>
       <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
     </div>
