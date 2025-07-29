@@ -19,6 +19,8 @@ from utils.slack_helpers import get_real_name, formatar_texto_slack
 
 # ── FastAPI / templates ─────────────────────────────────────────
 app = FastAPI()
+app.include_router(export_router)
+app.include_router(auth_router)
 from starlette.middleware.sessions import SessionMiddleware
 
 app.add_middleware(
