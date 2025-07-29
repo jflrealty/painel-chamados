@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Request, HTTPException
+resp = await oauth.azure.get("https://graph.microsoft.com/v1.0/me", token=token)
+user = await resp.json()
+email = user.get("mail") or user.get("userPrincipalName")from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
@@ -37,8 +39,11 @@ async def login(request: Request):
 @router.get("/auth/callback")
 async def auth_callback(request: Request):
     token = await oauth.azure.authorize_access_token(request)
-    user = await oauth.azure.parse_id_token(request, token)
-    email = user.get("preferred_username")
+    resp = await oauth.azure.get("https://graph.microsoft.com/v1.0/me", token=token)
+    user = await resp.json()
+
+    email = user.get("mail") or user.get("userPrincipalName")
+    name = user.get("displayName", email)
 
     allowed_emails = os.getenv("AZURE_ALLOWED_EMAILS", "").split(",")
     email_ok = email.lower() in [e.strip().lower() for e in allowed_emails]
@@ -48,11 +53,10 @@ async def auth_callback(request: Request):
 
     request.session["user"] = {
         "email": email,
-        "name": user.get("name"),
+        "name": name,
     }
     return RedirectResponse(url="/painel")
 
-# 🔓 Logout → limpa sessão e volta pro login
 @router.get("/logout")
 async def logout(request: Request):
     request.session.pop("user", None)
