@@ -9,13 +9,13 @@ router = APIRouter()
 config = Config(environ=os.environ)
 
 oauth = OAuth(config)
+oauth = OAuth(config)
 oauth.register(
     name="azure",
     client_id=os.getenv("AZURE_CLIENT_ID"),
     client_secret=os.getenv("AZURE_CLIENT_SECRET"),
-    authorize_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/authorize",
-    access_token_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/token",
-    client_kwargs={"scope": "User.Read openid email profile"},
+    server_metadata_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/v2.0/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
 )
 
 def require_login(request: Request) -> dict:
