@@ -152,7 +152,17 @@
           </td>
           <td>{% if ch.capturado_por == "<não capturado>" %}<em>&lt;não capturado&gt;</em>{% else %}{{ ch.capturado_por }}{% endif %}</td>
           <td class="text-center">{% if ch.mudou_tipo %}<span class="badge bg-info">⚡{% else %}-{% endif %}</td>
-          <td><button class="btn btn-sm btn-outline-primary" onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">Ver Thread</button></td>
+          <td class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-dark d-flex align-items-center gap-1" target="_blank"
+               href="https://app.slack.com/client/T06TFF6SH7F/{{ ch.canal_id }}/thread/{{ ch.thread_ts }}">
+               <img src="https://a.slack-edge.com/80588/marketing/img/meta/favicon-32.png" width="16" height="16">
+               Slack
+            </a>
+            <button class="btn btn-sm btn-outline-primary"
+                    onclick="verThread('{{ ch.canal_id }}','{{ ch.thread_ts }}')">
+              Ver Thread
+            </button>
+          </td>
         </tr>
       {% endfor %}
       </tbody>
