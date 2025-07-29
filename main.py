@@ -13,6 +13,7 @@ from utils.db_helpers import (
     contar_chamados,
     listar_responsaveis,
     listar_capturadores,
+    listar_tipos,
 )
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
