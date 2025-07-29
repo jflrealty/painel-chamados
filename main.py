@@ -30,10 +30,12 @@ slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
 
 # ═════════════════════════ ROTAS ════════════════════════════════
+from fastapi import Depends
 from auth import require_login
 
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request,
+                 user: dict = Depends(require_login),
                  status: str = "Todos",
                  responsavel: str = "Todos",
                  capturado: str = "Todos",
