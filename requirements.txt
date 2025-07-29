@@ -7,3 +7,5 @@ psycopg2-binary
 pytz
 pandas>=2.2
 openpyxl>=3.1
+authlib>=1.2.1
+httpx>=0.24.1
