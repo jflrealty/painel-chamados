@@ -63,7 +63,8 @@
     <select name="responsavel" class="form-select">
       <option value="">Todos</option>
       {% for r in responsaveis %}
-        <option value="{{ r }}" {{ 'selected' if filtros.responsavel==r else '' }}>{{ r }}</option>
+        <option value="{{ r }}" {{ 'selected' if filtros.responsavel==r else '' }}>
+          {{ get_real_name(r) or r }}    
       {% endfor %}
     </select>
   </div>
@@ -73,7 +74,8 @@
     <select name="capturado" class="form-select">
       <option value="">Todos</option>
       {% for c in capturadores %}
-        <option value="{{ c }}" {{ 'selected' if filtros.capturado==c else '' }}>{{ c }}</option>
+        <option value="{{ c }}" {{ 'selected' if filtros.capturado==c else '' }}>
+          {{ get_real_name(c) or c }}
       {% endfor %}
     </select>
   </div>
