@@ -38,7 +38,7 @@ async def auth_callback(request: Request):
 
     # Usa o access_token para buscar os dados do usuário diretamente
     resp = await oauth.azure.get("me", token=token)
-    user = await resp.json()
+    user = resp
 
     email = user.get("mail") or user.get("userPrincipalName")
     name = user.get("displayName") or email
