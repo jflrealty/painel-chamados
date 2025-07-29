@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
+from typing import Optional
 import os
 
 router = APIRouter()
@@ -16,6 +17,12 @@ oauth.register(
     access_token_url="https://login.microsoftonline.com/{}/oauth2/v2.0/token".format(os.getenv("AZURE_TENANT_ID")),
     client_kwargs={"scope": "User.Read openid email profile"},
 )
+
+def get_current_user(request: Request) -> Optional[dict]:
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=302, headers={"Location": "/login"})
+    return user
 
 @router.get("/login")
 async def login(request: Request):
