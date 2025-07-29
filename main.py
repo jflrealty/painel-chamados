@@ -28,7 +28,10 @@ PER_PAGE = 20
 # ── Slack client ────────────────────────────────────────────────
 slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
+
 # ═════════════════════════ ROTAS ════════════════════════════════
+from auth import require_login
+
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request,
                  status: str = "Todos",
