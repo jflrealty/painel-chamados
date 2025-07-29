@@ -23,13 +23,14 @@ def _base_sql():
 
 def _apply_filters(q: str, pr: list,
                    *, status=None, resp=None, d_ini=None, d_fim=None,
-                   capturado=None, mudou_tipo=None, sla=None):
+                   capturado=None, mudou_tipo=None, sla=None), tipo_ticket=None):
     if status:     q += " AND LOWER(status) = %s";  pr.append(status.lower())
     if resp:       q += " AND responsavel=%s";      pr.append(resp)
     if d_ini:      q += " AND data_abertura >= %s"; pr.append(d_ini)
     if d_fim:      q += " AND data_abertura <= %s"; pr.append(d_fim)
     if capturado:  q += " AND capturado_por=%s";    pr.append(capturado)
     if sla == "fora": q += " AND sla_status='fora'"
+    if tipo_ticket: q += " AND tipo_ticket=%s"; pr.append(tipo_ticket)
     if mudou_tipo == "sim":
         q += (" AND ( (log_edicoes IS NOT NULL AND log_edicoes <> '') "
                "OR (historico_reaberturas IS NOT NULL AND historico_reaberturas <> '') )")
@@ -86,4 +87,12 @@ def listar_capturadores(**filtros):
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
             return sorted({u for u in (_user(r[0]) for r in cur.fetchall()) if u != "<não capturado>"})
+    except Exception: return []
+
+def listar_tipos(**filtros):
+    q, pr = _apply_filters("SELECT DISTINCT tipo_ticket FROM ordens_servico WHERE true", [], **filtros)
+    try:
+        with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
+            cur.execute(q, pr)
+            return sorted({r[0] for r in cur.fetchall() if r[0]})
     except Exception: return []
