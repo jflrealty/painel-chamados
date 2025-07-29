@@ -32,12 +32,15 @@ async def login(request: Request):
 
 @router.get("/auth/callback")
 async def auth_callback(request: Request):
+    # Obtém o token de acesso
     token = await oauth.azure.authorize_access_token(request)
+
+    # Usa o access_token para buscar os dados do usuário diretamente
     resp = await oauth.azure.get("me", token=token)
     user = await resp.json()
 
     email = user.get("mail") or user.get("userPrincipalName")
-    name = user.get("displayName", email)
+    name = user.get("displayName") or email
 
     allowed_emails = os.getenv("AZURE_ALLOWED_EMAILS", "").split(",")
     email_ok = email.lower() in [e.strip().lower() for e in allowed_emails]
@@ -49,6 +52,7 @@ async def auth_callback(request: Request):
         "email": email,
         "name": name,
     }
+
     return RedirectResponse(url="/painel")
 
 @router.get("/logout")
