@@ -35,8 +35,10 @@ async def login(request: Request):
 async def auth_callback(request: Request):
     token = await oauth.azure.authorize_access_token(request)
 
-    # Aqui já vem como dict, não precisa await .json()
-    user = await oauth.azure.get("me", token=token)
+    # Usa o token para buscar dados do usuário
+    resp = await oauth.azure.get("me", token=token)
+    user = resp.json()  # <- importante: sem await
+
     email = user.get("mail") or user.get("userPrincipalName")
     name = user.get("displayName") or email
 
