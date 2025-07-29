@@ -23,7 +23,7 @@ def _base_sql():
 
 def _apply_filters(q: str, pr: list,
                    *, status=None, resp=None, d_ini=None, d_fim=None,
-                   capturado=None, mudou_tipo=None, sla=None), tipo_ticket=None):
+                   capturado=None, mudou_tipo=None, sla=None, tipo_ticket=None):
     if status:     q += " AND LOWER(status) = %s";  pr.append(status.lower())
     if resp:       q += " AND responsavel=%s";      pr.append(resp)
     if d_ini:      q += " AND data_abertura >= %s"; pr.append(d_ini)
