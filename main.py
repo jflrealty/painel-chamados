@@ -19,6 +19,12 @@ from utils.slack_helpers import get_real_name, formatar_texto_slack
 
 # ── FastAPI / templates ─────────────────────────────────────────
 app = FastAPI()
+from starlette.middleware.sessions import SessionMiddleware
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+)
 app.include_router(export_router)
 
 templates = Jinja2Templates(directory="templates")
