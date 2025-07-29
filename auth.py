@@ -13,13 +13,11 @@ oauth.register(
     name="azure",
     client_id=os.getenv("AZURE_CLIENT_ID"),
     client_secret=os.getenv("AZURE_CLIENT_SECRET"),
-    authorize_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/authorize",
-    access_token_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/token",
-    api_base_url="https://graph.microsoft.com/v1.0/",
+    server_metadata_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/v2.0/.well-known/openid-configuration",
     client_kwargs={
-        "scope": "User.Read openid email profile",
-        "openid": False  # 👈 impede que a lib tente validar id_token
-    },
+        "scope": "openid profile email User.Read",
+        "code_challenge_method": None  # impede erro de jwks_uri
+    }
 )
 def require_login(request: Request) -> dict:
     user: Optional[dict] = request.session.get("user")
