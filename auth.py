@@ -16,7 +16,7 @@ oauth.register(
     authorize_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/authorize",
     access_token_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/token",
     api_base_url="https://graph.microsoft.com/v1.0/",
-    client_kwargs={"scope": "User.Read openid email profile"},
+    client_kwargs={"scope": "User.Read email profile"},
 )
 
 def require_login(request: Request) -> dict:
