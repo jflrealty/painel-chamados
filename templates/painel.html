@@ -43,85 +43,85 @@
     {% endfor %}
   </div>
 
-  <!-- Filtros -->
-  <form method="get" action="/painel" class="row g-3 mb-4">
-    {% set sts = ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
+<!-- Filtros -->
+<form method="get" action="/painel" class="row g-2 mb-4 align-items-end">
+  {% set sts = ['','Aberto','Em Atendimento','Finalizado','Cancelado'] %}
 
-    <div class="col-md-2">
-      <label class="form-label">Status</label>
-      <select name="status" class="form-select">
-        {% for s in sts %}
-          <option value="{{ s }}" {{ 'selected' if filtros.status==s else '' }}>
-            {{ 'Todos' if not s else s }}
-          </option>
-        {% endfor %}
-      </select>
+  <div class="col-md-2">
+    <label class="form-label">Status</label>
+    <select name="status" class="form-select">
+      {% for s in sts %}
+        <option value="{{ s }}" {{ 'selected' if filtros.status==s else '' }}>
+          {{ 'Todos' if not s else s }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Responsável</label>
+    <select name="responsavel" class="form-select">
+      <option value="">Todos</option>
+      {% for r in responsaveis %}
+        <option value="{{ r }}" {{ 'selected' if filtros.responsavel==r else '' }}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Capturado por</label>
+    <select name="capturado" class="form-select">
+      <option value="">Todos</option>
+      {% for c in capturadores %}
+        <option value="{{ c }}" {{ 'selected' if filtros.capturado==c else '' }}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-1">
+    <label class="form-label">Mudou Tipo?</label>
+    <select name="mudou_tipo" class="form-select">
+      <option value=""   {{ 'selected' if not filtros.mudou_tipo else '' }}>Todos</option>
+      <option value="sim"{{ 'selected' if filtros.mudou_tipo=='sim' else '' }}>Sim</option>
+      <option value="nao"{{ 'selected' if filtros.mudou_tipo=='nao' else '' }}>Não</option>
+    </select>
+  </div>
+
+  <div class="col-md-1">
+    <label class="form-label">Tipo</label>
+    <select name="tipo" class="form-select">
+      <option value="">Todos</option>
+      {% for t in tipos %}
+        <option value="{{ t }}" {{ 'selected' if filtros.tipo==t else '' }}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Data Início</label>
+    <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
+  </div>
+
+  <div class="col-md-2">
+    <label class="form-label">Data Fim</label>
+    <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
+  </div>
+
+  <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+
+    <!-- Dropdown Exportar -->
+    <div class="dropdown">
+      <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" type="button">
+        Exportar
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="#" onclick="exportarChamados('xlsx')">Excel (.xlsx)</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportarChamados('csv')">CSV (;)</a></li>
+      </ul>
     </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Responsável</label>
-      <select name="responsavel" class="form-select">
-        <option value="">Todos</option>
-        {% for r in responsaveis %}
-          <option value="{{ r }}" {{ 'selected' if filtros.responsavel==r else '' }}>{{ r }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Capturado por</label>
-      <select name="capturado" class="form-select">
-        <option value="">Todos</option>
-        {% for c in capturadores %}
-          <option value="{{ c }}" {{ 'selected' if filtros.capturado==c else '' }}>{{ c }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Mudou Tipo?</label>
-      <select name="mudou_tipo" class="form-select">
-        <option value=""   {{ 'selected' if not filtros.mudou_tipo else '' }}>Todos</option>
-        <option value="sim"{{ 'selected' if filtros.mudou_tipo=='sim' else '' }}>Sim</option>
-        <option value="nao"{{ 'selected' if filtros.mudou_tipo=='nao' else '' }}>Não</option>
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Tipo de Chamado</label>
-      <select name="tipo" class="form-select">
-        <option value="">Todos</option>
-        {% for t in tipos %}
-          <option value="{{ t }}" {{ 'selected' if filtros.tipo==t else '' }}>{{ t }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Data Início</label>
-      <input type="date" name="data_ini" class="form-control" value="{{ filtros.data_ini or '' }}">
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Data Fim</label>
-      <input type="date" name="data_fim" class="form-control" value="{{ filtros.data_fim or '' }}">
-    </div>
-
-    <div class="col-12 d-flex justify-content-end gap-2 mt-2">
-      <button type="submit" class="btn btn-primary">Filtrar</button>
-
-      <!-- Dropdown Exportar -->
-      <div class="dropdown">
-        <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" type="button">
-          Exportar
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="#" onclick="exportarChamados('xlsx')">Excel (.xlsx)</a></li>
-          <li><a class="dropdown-item" href="#" onclick="exportarChamados('csv')">CSV (;)</a></li>
-        </ul>
-      </div>
-    </div>
-  </form>
+  </div>
+</form>
 
   <!-- Tabela -->
   <div class="table-responsive">
