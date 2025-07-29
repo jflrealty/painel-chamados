@@ -78,7 +78,7 @@ def listar_responsaveis(**filtros):
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
-            return sorted({_user(r[0]) for r in cur.fetchall()})
+            return sorted({r[0] for r in cur.fetchall() if r[0]})
     except Exception: return []
 
 def listar_capturadores(**filtros):
@@ -86,7 +86,7 @@ def listar_capturadores(**filtros):
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
-            return sorted({u for u in (_user(r[0]) for r in cur.fetchall()) if u != "<não capturado>"})
+            return sorted({r[0] for r in cur.fetchall() if r[0]})
     except Exception: return []
 
 def listar_tipos(**filtros):
