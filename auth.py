@@ -14,9 +14,10 @@ oauth.register(
     client_id=os.getenv("AZURE_CLIENT_ID"),
     client_secret=os.getenv("AZURE_CLIENT_SECRET"),
     server_metadata_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/v2.0/.well-known/openid-configuration",
+    api_base_url="https://graph.microsoft.com/v1.0/",
     client_kwargs={
         "scope": "openid profile email User.Read",
-        "code_challenge_method": None  # impede erro de jwks_uri
+        "code_challenge_method": None
     }
 )
 def require_login(request: Request) -> dict:
