@@ -33,13 +33,10 @@ async def login(request: Request):
 
 @router.get("/auth/callback")
 async def auth_callback(request: Request):
-    # Obtém o token de acesso
     token = await oauth.azure.authorize_access_token(request)
 
-    # Usa o access_token para buscar os dados do usuário diretamente
-    resp = await oauth.azure.get("me", token=token)
-    user = resp
-
+    # Aqui já vem como dict, não precisa await .json()
+    user = await oauth.azure.get("me", token=token)
     email = user.get("mail") or user.get("userPrincipalName")
     name = user.get("displayName") or email
 
