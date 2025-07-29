@@ -2,12 +2,13 @@
 import os, math, datetime as dt, pytz
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from slack_sdk import WebClient, errors as slack_err
-from auth import router as auth_router, require_login
 
+from auth import router as auth_router, require_login
 from export import export_router
 from utils.db_helpers import (
     carregar_chamados,
@@ -18,16 +19,15 @@ from utils.db_helpers import (
 )
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
-# ── FastAPI / templates ─────────────────────────────────────────
+# ── App e Middleware ────────────────────────────────────────────
 app = FastAPI()
-app.include_router(export_router)
-app.include_router(auth_router)
-from starlette.middleware.sessions import SessionMiddleware
 
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET_KEY", "3fa85f64-5717-4562-b3fc-2c963f66afa6")
 )
+
+app.include_router(auth_router)
 app.include_router(export_router)
 
 templates = Jinja2Templates(directory="templates")
