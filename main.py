@@ -53,8 +53,8 @@ async def painel(request: Request,
     # filtros preparados
     filtros = {
         "status":      status_map.get(status),
-        "resp":        None if responsavel == "Todos" else responsavel,
-        "capturado":   None if capturado == "Todos" else capturado,
+        "resp":        None if responsavel in ("Todos", "") else responsavel,
+        "capturado":   None if capturado in ("Todos", "") else capturado,
         "mudou_tipo":  None if mudou_tipo == "Todos" else mudou_tipo,
         "sla":         None if sla == "Todos" else sla,
         "tipo_ticket": None if tipo == "Todos" else tipo,
