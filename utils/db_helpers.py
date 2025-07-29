@@ -65,10 +65,10 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
 
     return [{
         "id": r[0], "tipo_ticket": r[1], "status": r[2].lower(),
-        "responsavel": _user(r[3]), "canal_id": r[4], "thread_ts": r[5],
+        "responsavel_uid": r[3], "responsavel": _user(r[3]), "canal_id": r[4], "thread_ts": r[5],
         "abertura": _fmt(r[6]), "fechamento": _fmt(r[7]),
         "sla": (r[8] or "-").lower(),
-        "capturado_por": _user(r[9]),
+        "capturado_uid": r[9], "capturado_por": _user(r[9]),
         "solicitante": _user(r[10]),
         "mudou_tipo": bool(r[10]) or bool(r[11]),
     } for r in rows]
