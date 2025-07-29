@@ -13,15 +13,15 @@ oauth.register(
     name="azure",
     client_id=os.getenv("AZURE_CLIENT_ID"),
     client_secret=os.getenv("AZURE_CLIENT_SECRET"),
-    authorize_url="https://login.microsoftonline.com/{}/oauth2/v2.0/authorize".format(os.getenv("AZURE_TENANT_ID")),
-    access_token_url="https://login.microsoftonline.com/{}/oauth2/v2.0/token".format(os.getenv("AZURE_TENANT_ID")),
+    authorize_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/authorize",
+    access_token_url=f"https://login.microsoftonline.com/{os.getenv('AZURE_TENANT_ID')}/oauth2/v2.0/token",
     client_kwargs={"scope": "User.Read openid email profile"},
 )
 
-def get_current_user(request: Request) -> Optional[dict]:
-    user = request.session.get("user")
+def require_login(request: Request) -> dict:
+    user: Optional[dict] = request.session.get("user")
     if not user:
-        raise HTTPException(status_code=302, headers={"Location": "/login"})
+        raise HTTPException(status_code=401, detail="Usuário não autenticado.")
     return user
 
 @router.get("/login")
@@ -35,7 +35,6 @@ async def auth_callback(request: Request):
     user = await oauth.azure.parse_id_token(request, token)
     email = user.get("preferred_username")
 
-    # Limita por e-mail (ou domínio, se quiser depois)
     allowed_emails = os.getenv("AZURE_ALLOWED_EMAILS", "").split(",")
     email_ok = email.lower() in [e.strip().lower() for e in allowed_emails]
 
@@ -52,12 +51,3 @@ async def auth_callback(request: Request):
 async def logout(request: Request):
     request.session.pop("user", None)
     return RedirectResponse(url="/login")
-
-from fastapi import Request
-from typing import Optional
-
-def require_login(request: Request) -> dict:
-    user: Optional[dict] = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuário não autenticado.")
-    return user
