@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from slack_sdk import WebClient, errors as slack_err
+from auth import router as auth_router, require_login
 
 from export import export_router
 from utils.db_helpers import (
