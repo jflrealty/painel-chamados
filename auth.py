@@ -52,3 +52,12 @@ async def auth_callback(request: Request):
 async def logout(request: Request):
     request.session.pop("user", None)
     return RedirectResponse(url="/login")
+
+from fastapi import Request
+from typing import Optional
+
+def require_login(request: Request) -> dict:
+    user: Optional[dict] = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não autenticado.")
+    return user
