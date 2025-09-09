@@ -130,6 +130,15 @@ async def painel(request: Request,
         },
     )
 
+@app.get("/dashboards", response_class=HTMLResponse)
+async def dashboards(request: Request, user: dict = Depends(require_login)):
+    return templates.TemplateResponse(
+        "dashboards.html",
+        {
+            "request": request
+        }
+    )
+    
 # ───────────────────────── THREAD ───────────────────────────────
 @app.post("/thread")
 async def thread(request: Request):
