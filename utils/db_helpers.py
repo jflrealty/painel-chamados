@@ -65,11 +65,31 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         print("DB ERRO (fetch):", e); return []
 
     return [{
-        "id": r[0], "tipo_ticket": r[1], "status": r[2].lower(),
-        "responsavel_uid": r[3], "responsavel": _user(r[3]), "canal_id": r[4], "thread_ts": r[5],
-        "abertura": _fmt(r[6]), "fechamento": _fmt(r[7]),
+        "id": r[0],
+        "tipo_ticket": r[1],
+        "status": r[2].lower(),
+        "responsavel_uid": r[3],
+        "responsavel": _user(r[3]),
+        "canal_id": r[4],
+        "thread_ts": r[5],
+
+        # Datas para exibição formatada
+        "abertura": _fmt(r[6]),
+        "fechamento": _fmt(r[7]),
+
+        # Datas cruas para dashboards (formatadas ISO)
+        "abertura_raw": r[6].isoformat() if r[6] else None,
+        "fechamento_raw": r[7].isoformat() if r[7] else None,
+
+        # SLA
         "sla": (r[8] or "-").lower(),
-        "capturado_uid": r[9], "capturado_por": _user(r[9]),
+
+        # Captura
+        "capturado_uid": r[9],
+        "capturado_por": _user(r[9]),
+        "captura_raw": r[9].isoformat() if r[9] else None,  # <- CAPTURA REAL (já preenchido)
+
+        # Solicitante e tipo
         "solicitante": _user(r[10]),
         "mudou_tipo": bool(r[10]) or bool(r[11]),
     } for r in rows]
