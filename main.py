@@ -1,168 +1,178 @@
-# main.py – Painel de Chamados v6 (estável + rápido)
-import os, math, datetime as dt, pytz
-from urllib.parse import urlencode
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboards</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { background:#f8f9fa; padding:30px }
+    canvas { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    h2 { margin-bottom: 30px; }
+  </style>
+</head>
+<body>
+  <div class="mb-4 d-flex gap-2">
+    <a class="btn btn-outline-dark" href="/painel">🏠 Home</a>
+    <a class="btn btn-outline-primary" href="/dashboards">📊 Dashboards</a>
+  </div>
 
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
-from slack_sdk import WebClient, errors as slack_err
+  <h2>📊 Painel de Dashboards</h2>
 
-from auth import router as auth_router, require_login
-from export import export_router
-from utils.db_helpers import (
-    carregar_chamados,
-    contar_chamados,
-    listar_responsaveis,
-    listar_capturadores,
-    listar_tipos,
-)
-from utils.slack_helpers import get_real_name, formatar_texto_slack
+  <form class="row g-2 mb-4" id="formFiltros">
+    <div class="col-md-3">
+      <label class="form-label">Data Início</label>
+      <input type="date" id="filtroDataIni" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Data Fim</label>
+      <input type="date" id="filtroDataFim" class="form-control">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Responsável</label>
+      <select id="filtroResponsavel" class="form-select"></select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+      <button type="submit" class="btn btn-primary w-100">🔄 Atualizar Dashboards</button>
+    </div>
+  </form>
 
-# ── App e Middleware ────────────────────────────────────────────
-app = FastAPI()
+  <div class="row g-4">
+    <div class="col-md-6">
+      <canvas id="chartStatus"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartResponsavel"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartTipo"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartSLACaptura"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartSLAEncerramento"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartMensal"></canvas>
+    </div>
+    <div class="col-md-6">
+      <canvas id="chartVendedor"></canvas>
+    </div>
+  </div>
 
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET_KEY", "3fa85f64-5717-4562-b3fc-2c963f66afa6")
-)
+  <script>
+    const chamadosOriginais = {{ dados | tojson | safe }};
 
-app.include_router(auth_router)
-app.include_router(export_router)
-
-templates = Jinja2Templates(directory="templates")
-templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
-PER_PAGE = 20
-
-# ── Slack client ────────────────────────────────────────────────
-slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
-
-
-# ═════════════════════════ ROTAS ════════════════════════════════
-from fastapi import Depends
-from auth import require_login
-
-@app.get("/painel", response_class=HTMLResponse)
-async def painel(request: Request,
-                 user: dict = Depends(require_login),
-                 status: str = "Todos",
-                 responsavel: str = "Todos",
-                 capturado: str = "Todos",
-                 mudou_tipo: str = "Todos",
-                 data_ini: str = None,
-                 data_fim: str = None,
-                 sla: str = "Todos",
-                 tipo: str = "Todos",
-                 page: int = 1):
-
-    # Mapeamento visual → real
-    status_map = {
-        "Aberto": "aberto",
-        "Em Atendimento": "em análise",
-        "Finalizado": "fechado",
-        "Cancelado": "cancelado",
-        "Todos": None
+    function agruparPor(lista, chave) {
+      return lista.reduce((acc, item) => {
+        const valor = item[chave] || '<não definido>';
+        acc[valor] = (acc[valor] || 0) + 1;
+        return acc;
+      }, {});
     }
 
-    # filtros preparados
-    filtros = {
-        "status":      status_map.get(status),
-        "resp":        None if responsavel in ("Todos", "") else responsavel,
-        "capturado":   None if capturado in ("Todos", "") else capturado,
-        "mudou_tipo":  None if mudou_tipo == "Todos" else mudou_tipo,
-        "sla":         None if sla == "Todos" else sla,
-        "tipo_ticket": None if tipo == "Todos" else tipo,
-    }
-
-    if data_ini:
-        try: filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
-        except: filtros["d_ini"] = None
-
-    if data_fim:
-        try: filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
-        except: filtros["d_fim"] = None
-
-    filtros_sem_status = {k: v for k, v in filtros.items()
-                          if k not in ("status", "sla", "mudou_tipo")}
-
-    total = contar_chamados(**filtros)
-    paginas_totais = max(1, math.ceil(total / PER_PAGE))
-    page = max(1, min(page, paginas_totais))
-    ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
-    chamados = carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
-
-    fs = dict(filtros_sem_status)  # evitar duplicação
-
-    fs.pop("status", None)
-    fs.pop("sla", None)
-    fs.pop("mudou_tipo", None)
-
-    metricas = {
-        "total":          total,
-        "em_atendimento": contar_chamados(status="em análise", **fs),
-        "finalizados":    contar_chamados(**fs, status="fechado"),
-        "fora_sla":       contar_chamados(sla="fora", **fs),
-        "mudaram_tipo":   contar_chamados(**fs, mudou_tipo="sim"),
-    }
-
-    filtros_dict = {
-        "status": status, "responsavel": responsavel,
-        "capturado": capturado, "mudou_tipo": mudou_tipo,
-        "data_ini": data_ini, "data_fim": data_fim,
-        "sla": sla, "tipo": tipo
-    }
-    filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v and v != "Todos"})
-
-    return templates.TemplateResponse(
-        "painel.html",
-        {
-            "request":        request,
-            "chamados":       chamados,
-            "metricas":       metricas,
-            "pagina_atual":   page,
-            "paginas_totais": paginas_totais,
-            "url_paginacao":  f"/painel?{filtros_qs}",
-            "filtros":        filtros_dict,
-            "responsaveis":   listar_responsaveis(),
-            "capturadores":   listar_capturadores(),
-            "tipos":          listar_tipos(),
-            "filtros_as_query": filtros_qs,
-        },
-    )
-
-@app.get("/dashboards", response_class=HTMLResponse)
-async def dashboards(request: Request, user: dict = Depends(require_login)):
-    from utils.db_helpers import carregar_chamados
-    dados = carregar_chamados(limit=200)
-    return templates.TemplateResponse(
-        "dashboards.html",
-        {
-            "request": request,
-            "dados": dados
+    function calcularSLAMedio(dados, inicioCampo, fimCampo) {
+      let totalHoras = 0;
+      let totalValidos = 0;
+      dados.forEach(c => {
+        const ini = new Date(c[inicioCampo]);
+        const fim = new Date(c[fimCampo]);
+        if (!isNaN(ini) && !isNaN(fim)) {
+          const horas = (fim - ini) / 3600000;
+          if (horas >= 0 && horas < 999) {
+            totalHoras += horas;
+            totalValidos++;
+          }
         }
-    )
-    
-# ───────────────────────── THREAD ───────────────────────────────
-@app.post("/thread")
-async def thread(request: Request):
-    form      = await request.form()
-    canal_id  = form["canal_id"]
-    thread_ts = form["thread_ts"]
+      });
+      return totalValidos ? (totalHoras / totalValidos).toFixed(2) : "0.00";
+    }
 
-    mensagens = []
-    try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
-        tz   = pytz.timezone("America/Sao_Paulo")
-        for i, m in enumerate(resp.get("messages", [])):
-            mensagens.append({
-                "texto": formatar_texto_slack(m.get("text", "")),
-                "ts": dt.datetime.fromtimestamp(float(m["ts"]))
-                      .astimezone(tz).strftime("%d/%m/%Y %H:%M"),
-                "user": get_real_name(m.get("user")) or "<não capturado>",
-                "orig": i == 0
-            })
-    except slack_err.SlackApiError as e:
-        print("Slack API:", e.response["error"])
+    function agruparPorMes(dados, campo) {
+      return dados.reduce((acc, c) => {
+        const dt = new Date(c[campo]);
+        if (!isNaN(dt)) {
+          const mes = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+          acc[mes] = (acc[mes] || 0) + 1;
+        }
+        return acc;
+      }, {});
+    }
 
-    return templates.TemplateResponse("thread.html",
-                                      {"request": request, "mensagens": mensagens})
+    function plotarBarChart(id, titulo, dados, cor = 'rgba(54, 162, 235, 0.7)') {
+      const ctx = document.getElementById(id);
+      const labels = Object.keys(dados);
+      const values = Object.values(dados);
+      new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: titulo, data: values, backgroundColor: cor, borderRadius: 5 }] },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false }, title: { display: true, text: titulo } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
+
+    function plotarGaugeChart(id, titulo, valor) {
+      const ctx = document.getElementById(id);
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['SLA Médio', 'Restante'],
+          datasets: [{
+            data: [valor, 24 - valor],
+            backgroundColor: ['#198754', '#e9ecef'],
+            cutout: '80%'
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: `${titulo}: ${valor}h` }
+          }
+        }
+      });
+    }
+
+    function atualizarDashboards() {
+      const ini = document.getElementById('filtroDataIni').value;
+      const fim = document.getElementById('filtroDataFim').value;
+      const resp = document.getElementById('filtroResponsavel').value;
+
+      let dados = [...chamadosOriginais];
+
+      if (ini) dados = dados.filter(c => new Date(c.abertura_raw) >= new Date(ini));
+      if (fim) dados = dados.filter(c => new Date(c.abertura_raw) <= new Date(fim));
+      if (resp) dados = dados.filter(c => c.responsavel === resp);
+
+      document.querySelectorAll('canvas').forEach(c => c.replaceWith(c.cloneNode(true)));
+
+      plotarBarChart('chartStatus', 'Volume por Status', agruparPor(dados, 'status'));
+      plotarBarChart('chartResponsavel', 'Volume por Responsável', agruparPor(dados, 'responsavel'));
+      plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'));
+      plotarGaugeChart('chartSLACaptura', 'SLA Médio para Captura', parseFloat(calcularSLAMedio(dados, 'abertura_raw', 'captura_raw')));
+      plotarGaugeChart('chartSLAEncerramento', 'SLA Médio para Encerramento', parseFloat(calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw')));
+      plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'));
+      plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'));
+    }
+
+    document.getElementById('formFiltros').addEventListener('submit', e => {
+      e.preventDefault();
+      atualizarDashboards();
+    });
+
+    const selectResp = document.getElementById('filtroResponsavel');
+    const responsaveis = [...new Set(chamadosOriginais.map(c => c.responsavel))].sort();
+    responsaveis.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r;
+      opt.textContent = r;
+      selectResp.appendChild(opt);
+    });
+
+    atualizarDashboards();
+  </script>
+</body>
+</html>
