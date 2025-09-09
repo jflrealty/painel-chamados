@@ -7,7 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { background:#f8f9fa; padding:30px }
-    canvas { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    canvas { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); height: 160px !important; }
     h2 { margin-bottom: 30px; }
   </style>
 </head>
@@ -20,19 +20,27 @@
   <h2>📊 Painel de Dashboards</h2>
 
   <form class="row g-2 mb-4" id="formFiltros">
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label">Data Início</label>
       <input type="date" id="filtroDataIni" class="form-control">
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label">Data Fim</label>
       <input type="date" id="filtroDataFim" class="form-control">
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label">Responsável</label>
       <select id="filtroResponsavel" class="form-select"></select>
     </div>
-    <div class="col-md-3 d-flex align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Status</label>
+      <select id="filtroStatus" class="form-select"></select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Tipo</label>
+      <select id="filtroTipo" class="form-select"></select>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
       <button type="submit" class="btn btn-primary w-100">🔄 Atualizar Dashboards</button>
     </div>
   </form>
@@ -140,12 +148,16 @@
       const ini = document.getElementById('filtroDataIni').value;
       const fim = document.getElementById('filtroDataFim').value;
       const resp = document.getElementById('filtroResponsavel').value;
+      const status = document.getElementById('filtroStatus').value;
+      const tipo = document.getElementById('filtroTipo').value;
 
       let dados = [...chamadosOriginais];
 
       if (ini) dados = dados.filter(c => new Date(c.abertura_raw) >= new Date(ini));
       if (fim) dados = dados.filter(c => new Date(c.abertura_raw) <= new Date(fim));
       if (resp) dados = dados.filter(c => c.responsavel === resp);
+      if (status) dados = dados.filter(c => c.status === status);
+      if (tipo) dados = dados.filter(c => c.tipo_ticket === tipo);
 
       document.querySelectorAll('canvas').forEach(c => c.replaceWith(c.cloneNode(true)));
 
@@ -163,13 +175,30 @@
       atualizarDashboards();
     });
 
+    const chamados = chamadosOriginais;
+
     const selectResp = document.getElementById('filtroResponsavel');
-    const responsaveis = [...new Set(chamadosOriginais.map(c => c.responsavel))].sort();
-    responsaveis.forEach(r => {
+    [...new Set(chamados.map(c => c.responsavel))].sort().forEach(v => {
       const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
+      opt.value = v;
+      opt.textContent = v;
       selectResp.appendChild(opt);
+    });
+
+    const selectStatus = document.getElementById('filtroStatus');
+    [...new Set(chamados.map(c => c.status))].sort().forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      selectStatus.appendChild(opt);
+    });
+
+    const selectTipo = document.getElementById('filtroTipo');
+    [...new Set(chamados.map(c => c.tipo_ticket))].sort().forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      selectTipo.appendChild(opt);
     });
 
     atualizarDashboards();
