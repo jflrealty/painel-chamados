@@ -133,7 +133,40 @@ async def painel(request: Request,
 @app.get("/dashboards", response_class=HTMLResponse)
 async def dashboards(request: Request, user: dict = Depends(require_login)):
     from utils.db_helpers import carregar_chamados
-    dados = carregar_chamados(limit=100)
+    import datetime as dt
+
+    # pega filtros da query string (vêm do JS via form)
+    data_ini = request.query_params.get("data_ini")
+    data_fim = request.query_params.get("data_fim")
+    responsavel = request.query_params.get("responsavel")
+
+    filtros = {}
+
+    if data_ini:
+        try:
+            filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
+        except:
+            pass
+
+    if data_fim:
+        try:
+            filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
+        except:
+            pass
+
+    if responsavel and responsavel != "Todos":
+        filtros["resp"] = responsavel
+
+    # aplica limit só se nenhum filtro for usado
+    usar_limit = not filtros
+    dados = carregar_chamados(limit=200 if usar_limit else None, **filtros)
+
+    # conserta datas para o frontend (caso venha datetime puro)
+    for c in dados:
+        for campo in ("abertura_raw", "captura_raw", "fechamento_raw"):
+            if isinstance(c.get(campo), dt.datetime):
+                c[campo] = c[campo].isoformat()
+
     return templates.TemplateResponse(
         "dashboards.html",
         {
