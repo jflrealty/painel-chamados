@@ -18,7 +18,8 @@ def _user(uid: str):         # UID → nome real / placeholder
 def _base_sql():
     return """SELECT id,tipo_ticket,status,responsavel,canal_id,thread_ts,
                      data_abertura,data_fechamento,sla_status,
-                     capturado_por,solicitante,log_edicoes,historico_reaberturas
+                     capturado_por,solicitante,log_edicoes,historico_reaberturas,
+                     data_captura
               FROM ordens_servico WHERE true"""
 
 def _apply_filters(q: str, pr: list,
