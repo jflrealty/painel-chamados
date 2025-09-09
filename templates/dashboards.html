@@ -6,9 +6,23 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background:#f8f9fa; padding:30px }
-    canvas { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); height: 160px !important; }
+    body { background: #f8f9fa; padding: 30px; }
     h2 { margin-bottom: 30px; }
+    .chart-card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
+      transition: transform 0.2s ease;
+      height: 100%;
+    }
+    .chart-card:hover {
+      transform: scale(1.02);
+    }
+    canvas {
+      width: 100% !important;
+      height: 300px !important;
+    }
   </style>
 </head>
 <body>
@@ -19,6 +33,7 @@
 
   <h2>📊 Painel de Dashboards</h2>
 
+  <!-- Filtros -->
   <form class="row g-2 mb-4" id="formFiltros">
     <div class="col-md-2">
       <label class="form-label">Data Início</label>
@@ -30,43 +45,40 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">Responsável</label>
-      <select id="filtroResponsavel" class="form-select"></select>
+      <select id="filtroResponsavel" class="form-select">
+        <option value="">Todos</option>
+      </select>
     </div>
     <div class="col-md-2">
       <label class="form-label">Status</label>
-      <select id="filtroStatus" class="form-select"></select>
+      <select id="filtroStatus" class="form-select">
+        <option value="">Todos</option>
+        <option value="aberto">Aberto</option>
+        <option value="em análise">Em Análise</option>
+        <option value="em atendimento">Em Atendimento</option>
+        <option value="fechado">Fechado</option>
+      </select>
     </div>
     <div class="col-md-2">
       <label class="form-label">Tipo</label>
-      <select id="filtroTipo" class="form-select"></select>
+      <select id="filtroTipo" class="form-select">
+        <option value="">Todos</option>
+      </select>
     </div>
     <div class="col-md-2 d-flex align-items-end">
       <button type="submit" class="btn btn-primary w-100">🔄 Atualizar Dashboards</button>
     </div>
   </form>
 
+  <!-- Gráficos -->
   <div class="row g-4">
-    <div class="col-md-6">
-      <canvas id="chartStatus"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartResponsavel"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartTipo"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartSLACaptura"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartSLAEncerramento"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartMensal"></canvas>
-    </div>
-    <div class="col-md-6">
-      <canvas id="chartVendedor"></canvas>
-    </div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartStatus"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartResponsavel"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartTipo"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartSLACaptura"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartSLAEncerramento"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartMensal"></canvas></div></div>
+    <div class="col-md-4"><div class="chart-card"><canvas id="chartVendedor"></canvas></div></div>
   </div>
 
   <script>
@@ -114,8 +126,9 @@
       const values = Object.values(dados);
       new Chart(ctx, {
         type: 'bar',
-        data: { labels, datasets: [{ label: titulo, data: values, backgroundColor: cor, borderRadius: 5 }] },
+        data: { labels, datasets: [{ label: titulo, data: values, backgroundColor: cor, borderRadius: 6 }] },
         options: {
+          animation: { duration: 1000 },
           responsive: true,
           plugins: { legend: { display: false }, title: { display: true, text: titulo } },
           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
@@ -132,10 +145,12 @@
           datasets: [{
             data: [valor, 24 - valor],
             backgroundColor: ['#198754', '#e9ecef'],
-            cutout: '80%'
+            cutout: '75%',
+            borderWidth: 1
           }]
         },
         options: {
+          animation: { duration: 1000 },
           plugins: {
             legend: { display: false },
             title: { display: true, text: `${titulo}: ${valor}h` }
@@ -175,29 +190,23 @@
       atualizarDashboards();
     });
 
-    const chamados = chamadosOriginais;
-
+    // Popular selects
     const selectResp = document.getElementById('filtroResponsavel');
-    [...new Set(chamados.map(c => c.responsavel))].sort().forEach(v => {
+    const selectTipo = document.getElementById('filtroTipo');
+    const responsaveis = [...new Set(chamadosOriginais.map(c => c.responsavel))].sort();
+    const tipos = [...new Set(chamadosOriginais.map(c => c.tipo_ticket))].sort();
+
+    responsaveis.forEach(r => {
       const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
+      opt.value = r;
+      opt.textContent = r;
       selectResp.appendChild(opt);
     });
 
-    const selectStatus = document.getElementById('filtroStatus');
-    [...new Set(chamados.map(c => c.status))].sort().forEach(v => {
+    tipos.forEach(t => {
       const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
-      selectStatus.appendChild(opt);
-    });
-
-    const selectTipo = document.getElementById('filtroTipo');
-    [...new Set(chamados.map(c => c.tipo_ticket))].sort().forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
+      opt.value = t;
+      opt.textContent = t;
       selectTipo.appendChild(opt);
     });
 
