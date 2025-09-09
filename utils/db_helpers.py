@@ -3,6 +3,7 @@ Acesso central ao Postgres – consultas enxutas.
 """
 import os, psycopg2, pytz
 from utils.slack_helpers import get_real_name
+from datetime import datetime
 
 _TZ = pytz.timezone("America/Sao_Paulo")
 _URL = os.getenv("DATABASE_PUBLIC_URL", "").replace("postgresql://", "postgres://", 1)
@@ -87,7 +88,11 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         # Captura
         "capturado_uid": r[9],
         "capturado_por": _user(r[9]),
-        "captura_raw": r[13].isoformat() if isinstance(r[13], (dt.datetime,)) else r[13],
+        "captura_raw": (
+            datetime.fromisoformat(r[13]).isoformat()
+            if isinstance(r[13], str)
+            else r[13].isoformat() if r[13] else None
+        ),
 
         # Solicitante e tipo
         "solicitante": _user(r[10]),
