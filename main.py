@@ -135,7 +135,8 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(
         "dashboards.html",
         {
-            "request": request
+            "request": request,
+            "dados": dados
         }
     )
     
