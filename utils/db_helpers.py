@@ -87,7 +87,7 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         # Captura
         "capturado_uid": r[9],
         "capturado_por": _user(r[9]),
-        "captura_raw": r[9].isoformat() if r[9] else None,  # <- CAPTURA REAL (já preenchido)
+        "captura_raw": r[13].isoformat() if isinstance(r[13], (dt.datetime,)) else r[13],
 
         # Solicitante e tipo
         "solicitante": _user(r[10]),
