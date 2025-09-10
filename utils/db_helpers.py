@@ -56,7 +56,8 @@ def contar_chamados(**filtros) -> int:
 def carregar_chamados(*, limit=None, offset=None, **filtros):
     q, pr = _apply_filters(_base_sql(), [], **filtros)
     q += " ORDER BY id DESC"
-    if limit:  q += f" LIMIT {limit}"
+    if limit is not None:
+        q += f" LIMIT {limit}"
     if offset: q += f" OFFSET {offset}"
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
