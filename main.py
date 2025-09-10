@@ -132,7 +132,6 @@ async def painel(request: Request,
 
 @app.get("/dashboards", response_class=HTMLResponse)
 async def dashboards(request: Request, user: dict = Depends(require_login)):
-    from utils.db_helpers import carregar_chamados
     import datetime as dt
 
     # Filtros que vêm do formulário
