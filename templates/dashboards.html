@@ -228,9 +228,7 @@ function calcularSLAMedio(dados, inicioCampo, fimCampo) {
     const ini = new Date(iniRaw);
     const fim = new Date(fimRaw);
 
-    // Verifica se as datas são válidas
-    if (isNaN(ini.getTime()) || isNaN(fim.getTime())) return;
-
+    if (!(ini instanceof Date && !isNaN(ini)) || !(fim instanceof Date && !isNaN(fim))) return;
     const diffHoras = (fim - ini) / 3600000;
 
     // Ignora chamados com duração negativa ou acima de 14 dias
