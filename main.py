@@ -149,16 +149,12 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
             filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
         except:
             pass
-    else:
-        filtros["d_ini"] = dt.datetime.now() - dt.timedelta(days=30)
 
     if data_fim:
         try:
             filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
         except:
             pass
-    else:
-        filtros["d_fim"] = dt.datetime.now()
 
     if responsavel and responsavel != "Todos":
         filtros["resp"] = responsavel
@@ -171,14 +167,13 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
 
     # Detecta se algum filtro foi usado manualmente
     usou_filtros = any([
-        data_ini,
-        data_fim,
+        data_ini, data_fim,
         responsavel and responsavel != "Todos",
         status and status != "Todos",
         tipo and tipo != "Todos"
     ])
 
-    # Aplica limit apenas se NENHUM filtro foi usado
+    # Só aplica LIMIT se nenhum filtro foi usado
     usar_limit = not usou_filtros
 
     dados = carregar_chamados(limit=200 if usar_limit else None, **filtros)
