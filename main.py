@@ -176,7 +176,7 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     usar_limit = not filtros_ativos
     print("usar_limit:", usar_limit)
 
-    dados = carregar_chamados(limit=200 if usar_limit else None, **filtros)
+    dados = carregar_chamados(**({} if usar_limit else filtros))
 
     # Ajusta datas para o front
     for c in dados:
