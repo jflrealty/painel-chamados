@@ -80,8 +80,8 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         "fechamento": _fmt(r[7]),
 
         # Datas cruas para dashboards (formatadas ISO)
-        "abertura_raw": r[6].isoformat() if r[6] else None,
-        "fechamento_raw": r[7].isoformat() if r[7] else None,
+        "abertura_raw": r[6].astimezone(_TZ).isoformat() if r[6] else None,
+        "fechamento_raw": r[7].astimezone(_TZ).isoformat() if r[7] else None,
 
         # SLA
         "sla": (r[8] or "-").lower(),
@@ -90,9 +90,11 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         "capturado_uid": r[9],
         "capturado_por": _user(r[9]),
         "captura_raw": (
-            datetime.fromisoformat(r[13]).isoformat()
-            if isinstance(r[13], str)
-            else r[13].isoformat() if r[13] else None
+            r[13].astimezone(_TZ).isoformat()
+            if isinstance(r[13], datetime)
+            else datetime.fromisoformat(r[13]).astimezone(_TZ).isoformat()
+            if isinstance(r[13], str) and r[13]
+            else None
         ),
 
         # Solicitante e tipo
