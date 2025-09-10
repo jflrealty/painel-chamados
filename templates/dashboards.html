@@ -119,7 +119,7 @@
       <div class="card-body p-2 text-center">
         <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="gray" class="bi bi-stopwatch" viewBox="0 0 16 16"><path d="M6.5.5a.5.5 0 0 1 .5.5v1h2V1a.5.5 0 0 1 1 0v1h1a.5.5 0 0 1 0 1h-.184A6.978 6.978 0 0 1 13 8a6.978 6.978 0 0 1-2.184 5H11a.5.5 0 0 1 0 1h-6a.5.5 0 0 1 0-1h.184A6.978 6.978 0 0 1 3 8a6.978 6.978 0 0 1 2.184-5H5a.5.5 0 0 1 0-1h1V1a.5.5 0 0 1 .5-.5zM8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z"/><path d="M8 4a.5.5 0 0 1 .5.5v3.379l2.015 2.015a.5.5 0 0 1-.707.707L7.5 8.586V4.5A.5.5 0 0 1 8 4z"/></svg></div>
         <h6 class="mb-0 small">SLA Médio Captura</h6>
-        <h5 id="kpiSlaCaptura" class="text-dark">0.00h</h5>
+        <h5 id="kpiSlaCaptura">0.00h</h5>
       </div>
     </div>
   </div>
@@ -128,7 +128,7 @@
       <div class="card-body p-2 text-center">
         <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="gray" class="bi bi-clock-history" viewBox="0 0 16 16"><path d="M8.515 3.879a.5.5 0 0 0-1.03 0v4.243l3.181 1.84a.5.5 0 1 0 .5-.866L8.515 8.121V3.879z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm0-1A7 7 0 1 1 8 1a7 7 0 0 1 0 14z"/></svg></div>
         <h6 class="mb-0 small">SLA Médio Encerramento</h6>
-        <h5 id="kpiSlaEncerramento" class="text-dark">0.00h</h5>
+        <h5 id="kpiSlaEncerramento">0.00h</h5>
       </div>
     </div>
   </div>
@@ -319,20 +319,30 @@
 
   // ✅ Muda cor do card com base no SLA
   function aplicarCorDinamicaSLA(cardId, valor) {
-    const card = document.getElementById(cardId);
-    const h = parseFloat(valor);
+  const card = document.getElementById(cardId);
+  const h = parseFloat(valor);
 
-    card.classList.remove("bg-success", "bg-warning", "bg-danger", "text-white", "text-dark");
+  // Limpa classes antigas do card
+  card.className = "card shadow p-2 text-center";
 
-    if (h < 2) {
-      card.classList.add("bg-success", "text-white");
-    } else if (h < 6) {
-      card.classList.add("bg-warning", "text-dark");
-    } else {
-      card.classList.add("bg-danger", "text-white");
-    }
+  // Pega o elemento <h5> dentro do card (onde está o valor do SLA)
+  const valorTexto = card.querySelector("h5");
+
+  // Limpa classes de cor anteriores do texto
+  valorTexto.classList.remove("text-white", "text-dark");
+
+  // Aplica cores de acordo com o SLA
+  if (h < 2) {
+    card.classList.add("bg-success");
+    valorTexto.classList.add("text-white");
+  } else if (h < 6) {
+    card.classList.add("bg-warning");
+    valorTexto.classList.add("text-dark");
+  } else {
+    card.classList.add("bg-danger");
+    valorTexto.classList.add("text-white");
   }
-
+}
   // ✅ Atualiza os KPIs
   function atualizarKPIs(dados) {
     const total = dados.length;
