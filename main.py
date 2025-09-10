@@ -135,10 +135,12 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     from utils.db_helpers import carregar_chamados
     import datetime as dt
 
-    # pega filtros da query string (vêm do JS via form)
+    # Filtros que vêm do formulário
     data_ini = request.query_params.get("data_ini")
     data_fim = request.query_params.get("data_fim")
     responsavel = request.query_params.get("responsavel")
+    status = request.query_params.get("status")
+    tipo = request.query_params.get("tipo")
 
     filtros = {}
 
@@ -147,21 +149,31 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
             filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
         except:
             pass
+    else:
+        filtros["d_ini"] = dt.datetime.now() - dt.timedelta(days=30)
 
     if data_fim:
         try:
             filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
         except:
             pass
+    else:
+        filtros["d_fim"] = dt.datetime.now()
 
     if responsavel and responsavel != "Todos":
         filtros["resp"] = responsavel
 
-    # aplica limit só se nenhum filtro for usado
-    usar_limit = not filtros
+    if status and status != "Todos":
+        filtros["status"] = status
+
+    if tipo and tipo != "Todos":
+        filtros["tipo_ticket"] = tipo
+
+    # Se o usuário **não usou filtro manual** (data_ini estava vazio), limitamos
+    usar_limit = request.query_params.get("data_ini") is None and not responsavel and not status and not tipo
+
     dados = carregar_chamados(limit=200 if usar_limit else None, **filtros)
 
-    # conserta datas para o frontend (caso venha datetime puro)
     for c in dados:
         for campo in ("abertura_raw", "captura_raw", "fechamento_raw"):
             if isinstance(c.get(campo), dt.datetime):
