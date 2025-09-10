@@ -6,24 +6,28 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { background: #f8f9fa; padding: 30px; }
-    h2 { margin-bottom: 30px; }
-    .chart-card {
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
-      transition: transform 0.2s ease;
-      height: 100%;
-    }
-    .chart-card:hover {
-      transform: scale(1.02);
-    }
-    canvas {
-      width: 100% !important;
-      height: 300px !important;
-    }
-  </style>
+  body { background:#f8f9fa; padding:30px }
+  canvas {
+    background: #fff;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.05);
+  }
+  h2 { margin-bottom: 30px; }
+
+  .chart-card {
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .chart-container {
+    width: 100%;
+    max-width: 100%;
+    height: 320px;
+  }
+</style>
 </head>
 <body>
   <div class="mb-4 d-flex gap-2">
@@ -31,7 +35,7 @@
     <a class="btn btn-outline-primary" href="/dashboards">📊 Dashboards</a>
   </div>
 
-  <h2>📊 Painel de Dashboards</h2>
+  <h2 class="fw-bold text-primary">📊 Painel Gerencial de Chamados</h2>
 
   <!-- Filtros -->
   <form class="row g-2 mb-4" id="formFiltros">
@@ -71,16 +75,29 @@
   </form>
 
   <!-- Gráficos -->
-  <div class="row g-4">
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartStatus"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartResponsavel"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartTipo"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartSLACaptura"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartSLAEncerramento"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartMensal"></canvas></div></div>
-    <div class="col-md-4"><div class="chart-card"><canvas id="chartVendedor"></canvas></div></div>
+<div class="row g-4">
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartStatus"></canvas></div>
   </div>
-
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartResponsavel"></canvas></div>
+  </div>
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartTipo"></canvas></div>
+  </div>
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartVendedor"></canvas></div>
+  </div>
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartMensal"></canvas></div>
+  </div>
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartSLACaptura"></canvas></div>
+  </div>
+  <div class="col-md-6 chart-card">
+    <div class="chart-container"><canvas id="chartSLAEncerramento"></canvas></div>
+  </div>
+</div>
   <script>
     const chamadosOriginais = {{ dados | tojson | safe }};
 
@@ -113,7 +130,7 @@
       return dados.reduce((acc, c) => {
         const dt = new Date(c[campo]);
         if (!isNaN(dt)) {
-          const mes = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+          const mes = dt.toLocaleDateString("pt-BR", { month: 'short', year: 'numeric' });
           acc[mes] = (acc[mes] || 0) + 1;
         }
         return acc;
@@ -121,44 +138,87 @@
     }
 
     function plotarBarChart(id, titulo, dados, cor = 'rgba(54, 162, 235, 0.7)') {
-      const ctx = document.getElementById(id);
-      const labels = Object.keys(dados);
-      const values = Object.values(dados);
-      new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: titulo, data: values, backgroundColor: cor, borderRadius: 6 }] },
-        options: {
-          animation: { duration: 1000 },
-          responsive: true,
-          plugins: { legend: { display: false }, title: { display: true, text: titulo } },
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-        }
-      });
-    }
-
-    function plotarGaugeChart(id, titulo, valor) {
-      const ctx = document.getElementById(id);
-      new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['SLA Médio', 'Restante'],
-          datasets: [{
-            data: [valor, 24 - valor],
-            backgroundColor: ['#198754', '#e9ecef'],
-            cutout: '75%',
-            borderWidth: 1
-          }]
+  const ctx = document.getElementById(id);
+  const labels = Object.keys(dados);
+  const values = Object.values(dados);
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: titulo,
+        data: values,
+        backgroundColor: cor,
+        borderRadius: 6,
+        barThickness: 30
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: titulo,
+          font: { size: 18 }
         },
-        options: {
-          animation: { duration: 1000 },
-          plugins: {
-            legend: { display: false },
-            title: { display: true, text: `${titulo}: ${valor}h` }
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.parsed.y} chamados`;
+            }
           }
         }
-      });
+      },
+      scales: {
+        x: {
+          ticks: {
+            maxRotation: 45,
+            minRotation: 0,
+            font: { size: 12 }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            stepSize: 10,
+            font: { size: 12 }
+          }
+        }
+      }
     }
+  });
+}
 
+    function plotarGaugeChart(id, titulo, valor) {
+  const ctx = document.getElementById(id);
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['SLA Médio', 'Restante'],
+      datasets: [{
+        data: [valor, 24 - valor],
+        backgroundColor: ['#198754', '#e9ecef'],
+        cutout: '75%',
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: `${titulo}: ${valor}h`,
+          font: { size: 18 }
+        }
+      }
+    }
+  });
+}
     function atualizarDashboards() {
       const ini = document.getElementById('filtroDataIni').value;
       const fim = document.getElementById('filtroDataFim').value;
@@ -176,13 +236,11 @@
 
       document.querySelectorAll('canvas').forEach(c => c.replaceWith(c.cloneNode(true)));
 
-      plotarBarChart('chartStatus', 'Volume por Status', agruparPor(dados, 'status'));
-      plotarBarChart('chartResponsavel', 'Volume por Responsável', agruparPor(dados, 'responsavel'));
-      plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'));
-      plotarGaugeChart('chartSLACaptura', 'SLA Médio para Captura', parseFloat(calcularSLAMedio(dados, 'abertura_raw', 'captura_raw')));
-      plotarGaugeChart('chartSLAEncerramento', 'SLA Médio para Encerramento', parseFloat(calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw')));
-      plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'));
-      plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'));
+      plotarBarChart('chartStatus', 'Volume por Status', agruparPor(dados, 'status'), 'rgba(75, 192, 192, 0.7)');
+      plotarBarChart('chartResponsavel', 'Volume por Responsável', agruparPor(dados, 'responsavel'), 'rgba(255, 99, 132, 0.7)');
+      plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'), 'rgba(255, 206, 86, 0.7)');
+      plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'), 'rgba(153, 102, 255, 0.7)');
+      plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'), 'rgba(255, 159, 64, 0.7)');
     }
 
     document.getElementById('formFiltros').addEventListener('submit', e => {
