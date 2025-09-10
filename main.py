@@ -169,11 +169,21 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     if tipo and tipo != "Todos":
         filtros["tipo_ticket"] = tipo
 
-    # Se o usuário **não usou filtro manual** (data_ini estava vazio), limitamos
-    usar_limit = request.query_params.get("data_ini") is None and not responsavel and not status and not tipo
+    # Detecta se algum filtro foi usado manualmente
+    usou_filtros = any([
+        data_ini,
+        data_fim,
+        responsavel and responsavel != "Todos",
+        status and status != "Todos",
+        tipo and tipo != "Todos"
+    ])
+
+    # Aplica limit apenas se NENHUM filtro foi usado
+    usar_limit = not usou_filtros
 
     dados = carregar_chamados(limit=200 if usar_limit else None, **filtros)
 
+    # Ajusta datas para o front
     for c in dados:
         for campo in ("abertura_raw", "captura_raw", "fechamento_raw"):
             if isinstance(c.get(campo), dt.datetime):
