@@ -27,6 +27,31 @@
     max-width: 100%;
     height: 320px;
   }
+
+  /* 🎨 Estilos refinados para os cards de KPI */
+  .card h6 {
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+
+  .card h5 {
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .card svg {
+    margin-bottom: 4px;
+  }
+
+  #kpiCards .card {
+    border: none;
+    transition: all 0.2s ease-in-out;
+  }
+
+  #kpiCards .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
 </style>
 </head>
 <body>
@@ -35,7 +60,55 @@
     <a class="btn btn-outline-primary" href="/dashboards">📊 Dashboards</a>
   </div>
 
-  <h2 class="fw-bold text-primary">📊 Painel Gerencial de Chamados</h2>
+  <h2 class="fw-bold text-primary">📊 Painel de Chamados</h2>
+
+ <div class="row g-3 mb-4" id="kpiCards">
+  <div class="col-md-2">
+    <div class="card text-white bg-primary shadow">
+      <div class="card-body p-2 text-center">
+        <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="white" class="bi bi-bar-chart" viewBox="0 0 16 16"><path d="M0 0h1v15h15v1H0V0zm10 10h1v3h-1v-3zM5 5h1v8H5V5zm5-3h1v11h-1V2z"/></svg></div>
+        <h6 class="mb-0 small">Total</h6>
+        <h5 id="kpiTotal">0</h5>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card text-white bg-warning shadow">
+      <div class="card-body p-2 text-center">
+        <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="black" class="bi bi-exclamation-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/><path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zm.93-6.588-.82 4.001c-.07.34.16.587.44.587h.856c.28 0 .51-.247.44-.587l-.82-4.001c-.07-.34-.37-.34-.5 0z"/></svg></div>
+        <h6 class="mb-0 small">Abertos</h6>
+        <h5 id="kpiAbertos">0</h5>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card text-white bg-success shadow">
+      <div class="card-body p-2 text-center">
+        <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="white" class="bi bi-check-circle" viewBox="0 0 16 16"><path d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0zM0 8a8 8 0 1 0 16 0A8 8 0 0 0 0 8z"/><path d="M11.03 5.97a.75.75 0 0 0-1.06-1.06L7 7.94 6.03 6.97a.75.75 0 0 0-1.06 1.06l1.5 1.5a.75.75 0 0 0 1.06 0l3.5-3.5z"/></svg></div>
+        <h6 class="mb-0 small">Fechados</h6>
+        <h5 id="kpiFechados">0</h5>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-light shadow" id="cardSlaCaptura">
+      <div class="card-body p-2 text-center">
+        <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="gray" class="bi bi-stopwatch" viewBox="0 0 16 16"><path d="M6.5.5a.5.5 0 0 1 .5.5v1h2V1a.5.5 0 0 1 1 0v1h1a.5.5 0 0 1 0 1h-.184A6.978 6.978 0 0 1 13 8a6.978 6.978 0 0 1-2.184 5H11a.5.5 0 0 1 0 1h-6a.5.5 0 0 1 0-1h.184A6.978 6.978 0 0 1 3 8a6.978 6.978 0 0 1 2.184-5H5a.5.5 0 0 1 0-1h1V1a.5.5 0 0 1 .5-.5zM8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z"/><path d="M8 4a.5.5 0 0 1 .5.5v3.379l2.015 2.015a.5.5 0 0 1-.707.707L7.5 8.586V4.5A.5.5 0 0 1 8 4z"/></svg></div>
+        <h6 class="mb-0 small">SLA Médio Captura</h6>
+        <h5 id="kpiSlaCaptura" class="text-dark">0.00h</h5>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-light shadow" id="cardSlaEncerramento">
+      <div class="card-body p-2 text-center">
+        <div class="mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" fill="gray" class="bi bi-clock-history" viewBox="0 0 16 16"><path d="M8.515 3.879a.5.5 0 0 0-1.03 0v4.243l3.181 1.84a.5.5 0 1 0 .5-.866L8.515 8.121V3.879z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm0-1A7 7 0 1 1 8 1a7 7 0 0 1 0 14z"/></svg></div>
+        <h6 class="mb-0 small">SLA Médio Encerramento</h6>
+        <h5 id="kpiSlaEncerramento" class="text-dark">0.00h</h5>
+      </div>
+    </div>
+  </div>
+</div>
 
   <!-- Filtros -->
   <form class="row g-2 mb-4" id="formFiltros">
@@ -220,55 +293,60 @@
   });
 }
     function atualizarDashboards() {
-      const ini = document.getElementById('filtroDataIni').value;
-      const fim = document.getElementById('filtroDataFim').value;
-      const resp = document.getElementById('filtroResponsavel').value;
-      const status = document.getElementById('filtroStatus').value;
-      const tipo = document.getElementById('filtroTipo').value;
+  const ini = document.getElementById('filtroDataIni').value;
+  const fim = document.getElementById('filtroDataFim').value;
+  const resp = document.getElementById('filtroResponsavel').value;
+  const status = document.getElementById('filtroStatus').value;
+  const tipo = document.getElementById('filtroTipo').value;
 
-      let dados = [...chamadosOriginais];
+  let dados = [...chamadosOriginais];
 
-      if (ini) dados = dados.filter(c => new Date(c.abertura_raw) >= new Date(ini));
-      if (fim) dados = dados.filter(c => new Date(c.abertura_raw) <= new Date(fim));
-      if (resp) dados = dados.filter(c => c.responsavel === resp);
-      if (status) dados = dados.filter(c => c.status === status);
-      if (tipo) dados = dados.filter(c => c.tipo_ticket === tipo);
+  if (ini) dados = dados.filter(c => new Date(c.abertura_raw) >= new Date(ini));
+  if (fim) dados = dados.filter(c => new Date(c.abertura_raw) <= new Date(fim));
+  if (resp) dados = dados.filter(c => c.responsavel === resp);
+  if (status) dados = dados.filter(c => c.status === status);
+  if (tipo) dados = dados.filter(c => c.tipo_ticket === tipo);
 
-      document.querySelectorAll('canvas').forEach(c => c.replaceWith(c.cloneNode(true)));
+  document.querySelectorAll('canvas').forEach(c => c.replaceWith(c.cloneNode(true)));
 
-      plotarBarChart('chartStatus', 'Volume por Status', agruparPor(dados, 'status'), 'rgba(75, 192, 192, 0.7)');
-      plotarBarChart('chartResponsavel', 'Volume por Responsável', agruparPor(dados, 'responsavel'), 'rgba(255, 99, 132, 0.7)');
-      plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'), 'rgba(255, 206, 86, 0.7)');
-      plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'), 'rgba(153, 102, 255, 0.7)');
-      plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'), 'rgba(255, 159, 64, 0.7)');
-    }
+  plotarBarChart('chartStatus', 'Volume por Status', agruparPor(dados, 'status'), 'rgba(75, 192, 192, 0.7)');
+  plotarBarChart('chartResponsavel', 'Volume por Responsável', agruparPor(dados, 'responsavel'), 'rgba(255, 99, 132, 0.7)');
+  plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'), 'rgba(255, 206, 86, 0.7)');
+  plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'), 'rgba(153, 102, 255, 0.7)');
+  plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'), 'rgba(255, 159, 64, 0.7)');
+  plotarGaugeChart('chartSLACaptura', 'SLA Médio Captura', calcularSLAMedio(dados, 'abertura_raw', 'captura_raw'));
+  plotarGaugeChart('chartSLAEncerramento', 'SLA Médio Fechamento', calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw'));
 
-    document.getElementById('formFiltros').addEventListener('submit', e => {
-      e.preventDefault();
-      atualizarDashboards();
-    });
+  // 👇 AQUI ficam os KPIs
+  const total = dados.length;
+  const abertos = dados.filter(c => c.status === 'aberto').length;
+  const fechados = dados.filter(c => c.status === 'fechado').length;
+  const slaCaptura = calcularSLAMedio(dados, 'abertura_raw', 'captura_raw');
+  const slaFechamento = calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw');
 
-    // Popular selects
-    const selectResp = document.getElementById('filtroResponsavel');
-    const selectTipo = document.getElementById('filtroTipo');
-    const responsaveis = [...new Set(chamadosOriginais.map(c => c.responsavel))].sort();
-    const tipos = [...new Set(chamadosOriginais.map(c => c.tipo_ticket))].sort();
+  // 🟢 Muda cor do card com base no SLA
+function aplicarCorDinamicaSLA(cardId, valor) {
+  const card = document.getElementById(cardId);
+  const h = parseFloat(valor);
+  if (h < 2) {
+    card.className = "card bg-success shadow text-white";
+  } else if (h < 6) {
+    card.className = "card bg-warning shadow text-dark";
+  } else {
+    card.className = "card bg-danger shadow text-white";
+  }
+}
 
-    responsaveis.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
-      selectResp.appendChild(opt);
-    });
+// Chamada após atualizar os KPIs
+aplicarCorDinamicaSLA('cardSlaCaptura', slaCaptura);
+aplicarCorDinamicaSLA('cardSlaEncerramento', slaFechamento);
 
-    tipos.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t;
-      opt.textContent = t;
-      selectTipo.appendChild(opt);
-    });
-
-    atualizarDashboards();
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiAbertos').textContent = abertos;
+  document.getElementById('kpiFechados').textContent = fechados;
+  document.getElementById('kpiSlaCaptura').textContent = `${slaCaptura}h`;
+  document.getElementById('kpiSlaEncerramento').textContent = `${slaFechamento}h`;
+}
   </script>
 </body>
 </html>
