@@ -219,20 +219,25 @@
     const iniRaw = c[inicioCampo];
     const fimRaw = c[fimCampo];
 
-    if (!iniRaw || !fimRaw) return; // ❌ Campos ausentes
+    // Verifica se os campos existem e são strings válidas
+    if (!iniRaw || !fimRaw || typeof iniRaw !== "string" || typeof fimRaw !== "string") return;
 
     const ini = new Date(iniRaw);
     const fim = new Date(fimRaw);
 
-    if (isNaN(ini) || isNaN(fim)) return; // ❌ Data inválida
+    // Verifica se as datas são válidas
+    if (isNaN(ini) || isNaN(fim)) return;
 
     const horas = (fim - ini) / 3600000;
 
-    if (horas >= 0 && horas < 999) {
+    // Ignora chamados com SLA muito absurdo ou negativo
+    if (horas >= 0 && horas <= 48 * 7) {  // 14 dias
       totalHoras += horas;
       totalValidos++;
     }
   });
+
+  console.log(`[DEBUG SLA] Campo: ${inicioCampo} -> ${fimCampo} | Válidos: ${totalValidos}`);
 
   return totalValidos ? (totalHoras / totalValidos).toFixed(2) : "0.00";
 }
