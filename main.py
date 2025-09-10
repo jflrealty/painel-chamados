@@ -181,8 +181,15 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     # Ajusta datas para o front
     for c in dados:
         for campo in ("abertura_raw", "captura_raw", "fechamento_raw"):
-            if isinstance(c.get(campo), dt.datetime):
-                c[campo] = c[campo].isoformat()
+            valor = c.get(campo)
+            if valor:
+                if isinstance(valor, dt.datetime):
+                    c[campo] = valor.isoformat()
+                elif isinstance(valor, str):
+                    try:
+                        c[campo] = dt.datetime.fromisoformat(valor).isoformat()
+                    except:
+                        c[campo] = None
 
     return templates.TemplateResponse(
         "dashboards.html",
