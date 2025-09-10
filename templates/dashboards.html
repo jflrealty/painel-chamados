@@ -212,22 +212,30 @@
   }
 
   function calcularSLAMedio(dados, inicioCampo, fimCampo) {
-    let totalHoras = 0;
-    let totalValidos = 0;
-    dados.forEach(c => {
-      const ini = new Date(c[inicioCampo]);
-      const fim = new Date(c[fimCampo]);
-      if (!isNaN(ini) && !isNaN(fim)) {
-        const horas = (fim - ini) / 3600000;
-        if (horas >= 0 && horas < 999) {
-          totalHoras += horas;
-          totalValidos++;
-        }
-      }
-    });
-    return totalValidos ? (totalHoras / totalValidos).toFixed(2) : "0.00";
-  }
+  let totalHoras = 0;
+  let totalValidos = 0;
 
+  dados.forEach(c => {
+    const iniRaw = c[inicioCampo];
+    const fimRaw = c[fimCampo];
+
+    if (!iniRaw || !fimRaw) return; // ❌ Campos ausentes
+
+    const ini = new Date(iniRaw);
+    const fim = new Date(fimRaw);
+
+    if (isNaN(ini) || isNaN(fim)) return; // ❌ Data inválida
+
+    const horas = (fim - ini) / 3600000;
+
+    if (horas >= 0 && horas < 999) {
+      totalHoras += horas;
+      totalValidos++;
+    }
+  });
+
+  return totalValidos ? (totalHoras / totalValidos).toFixed(2) : "0.00";
+}
   function agruparPorMes(dados, campo) {
     return dados.reduce((acc, c) => {
       const dt = new Date(c[campo]);
