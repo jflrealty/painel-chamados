@@ -222,25 +222,26 @@ function calcularSLAMedio(dados, inicioCampo, fimCampo) {
     const iniRaw = c[inicioCampo];
     const fimRaw = c[fimCampo];
 
-    // Verifica se os campos existem e são strings válidas
-    if (!iniRaw || !fimRaw || typeof iniRaw !== "string" || typeof fimRaw !== "string") return;
+    // Ignora registros ausentes
+    if (!iniRaw || !fimRaw) return;
 
     const ini = new Date(iniRaw);
     const fim = new Date(fimRaw);
 
+    // Valida as datas
     if (!(ini instanceof Date && !isNaN(ini)) || !(fim instanceof Date && !isNaN(fim))) return;
+
     const diffHoras = (fim - ini) / 3600000;
 
-    // Ignora chamados com duração negativa ou acima de 14 dias
+    // Ignora chamados com duração negativa ou muito fora do padrão (limite de 14 dias úteis)
     if (diffHoras >= 0 && diffHoras <= 48 * 7) {
       totalHoras += diffHoras;
       totalValidos++;
     }
   });
 
-  console.log(`[DEBUG SLA] Campo: ${inicioCampo} → ${fimCampo} | Chamados válidos: ${totalValidos}`);
-
-  return totalValidos > 0 ? (totalHoras / totalValidos).toFixed(2) : "0.00";
+  console.log(`[DEBUG SLA] Campo: ${inicioCampo} → ${fimCampo} | Válidos: ${totalValidos}`);
+  return totalValidos ? (totalHoras / totalValidos).toFixed(2) : "0.00";
 }
     
   function agruparPorMes(dados, campo) {
