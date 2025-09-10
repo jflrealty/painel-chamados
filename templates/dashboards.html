@@ -166,12 +166,15 @@
         <option value="">Todos</option>
       </select>
     </div>
-    <div class="col-md-2 d-flex align-items-end">
-      <button type="submit" class="btn btn-primary w-100">🔄 Atualizar Dashboards</button>
-
-    <div class="col-md-2 d-flex align-items-end">
-      <button type="button" class="btn btn-outline-secondary w-100" onclick="window.location.href='/dashboards'">🧹 Limpar Filtros</button>
+    <div class="d-flex justify-content-end align-items-center gap-2 mb-3">
+      <button type="submit" class="btn btn-primary">
+      Atualizar Dashboards
+      </button>
+      <button onclick="limparFiltros()" class="btn btn-outline-secondary">
+      Limpar Filtros
+      </button>
     </div>
+</div>
     
     </div>
   </form>
