@@ -369,7 +369,7 @@ function calcularSLAMedio(dados, inicioCampo, fimCampo) {
     const total = dados.length;
     const abertos = dados.filter(c => c.status === 'aberto').length;
     const fechados = dados.filter(c => c.status === 'fechado').length;
-    const slaCaptura = calcularSLAMedio(dados, 'abertura_raw', 'captura_raw');
+    const slaCaptura = calcularSLAMedio(dados, 'captura_raw', 'abertura_raw');
     const slaFechamento = calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw');
 
     document.getElementById('kpiTotal').textContent = total;
@@ -404,7 +404,7 @@ function calcularSLAMedio(dados, inicioCampo, fimCampo) {
     plotarBarChart('chartTipo', 'Volume por Tipo de Chamado', agruparPor(dados, 'tipo_ticket'), 'rgba(255, 206, 86, 0.7)');
     plotarBarChart('chartMensal', 'Volume de Chamados por Mês', agruparPorMes(dados, 'abertura_raw'), 'rgba(153, 102, 255, 0.7)');
     plotarBarChart('chartVendedor', 'Volume por Vendedor', agruparPor(dados, 'solicitante'), 'rgba(255, 159, 64, 0.7)');
-    plotarGaugeChart('chartSLACaptura', 'SLA Médio Captura', calcularSLAMedio(dados, 'abertura_raw', 'captura_raw'));
+    plotarGaugeChart('chartSLACaptura', 'SLA Médio Captura', calcularSLAMedio(dados, 'captura_raw', 'abertura_raw'));
     plotarGaugeChart('chartSLAEncerramento', 'SLA Médio Fechamento', calcularSLAMedio(dados, 'abertura_raw', 'fechamento_raw'));
 
     atualizarKPIs(dados); // ✅ Chamando função corretamente
