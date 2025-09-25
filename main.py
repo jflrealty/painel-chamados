@@ -133,19 +133,89 @@ async def painel(request: Request,
     )
 
 @app.get("/painel-financeiro", response_class=HTMLResponse)
-async def painel_financeiro(request: Request, user: dict = Depends(require_login)):
-    chamados = db_financeiro.carregar_chamados()
-    responsaveis = db_financeiro.listar_responsaveis()
-    capturadores = db_financeiro.listar_capturadores()
-    tipos = db_financeiro.listar_tipos()
+async def painel_financeiro(request: Request,
+                            user: dict = Depends(require_login),
+                            status: str = "Todos",
+                            responsavel: str = "Todos",
+                            capturado: str = "Todos",
+                            mudou_tipo: str = "Todos",
+                            data_ini: str = None,
+                            data_fim: str = None,
+                            sla: str = "Todos",
+                            tipo: str = "Todos",
+                            page: int = 1):
 
-    return templates.TemplateResponse("painel_financeiro.html", {
-        "request": request,
-        "chamados": chamados,
-        "responsaveis": responsaveis,
-        "capturadores": capturadores,
-        "tipos": tipos
-    })
+    status_map = {
+        "Aberto": "aberto",
+        "Em Atendimento": "em análise",
+        "Finalizado": "fechado",
+        "Cancelado": "cancelado",
+        "Todos": None
+    }
+
+    filtros = {
+        "status":      status_map.get(status),
+        "resp":        None if responsavel in ("Todos", "") else responsavel,
+        "capturado":   None if capturado in ("Todos", "") else capturado,
+        "mudou_tipo":  None if mudou_tipo == "Todos" else mudou_tipo,
+        "sla":         None if sla == "Todos" else sla,
+        "tipo_ticket": None if tipo == "Todos" else tipo,
+    }
+
+    if data_ini:
+        try: filtros["d_ini"] = dt.datetime.strptime(data_ini, "%Y-%m-%d")
+        except: filtros["d_ini"] = None
+
+    if data_fim:
+        try: filtros["d_fim"] = dt.datetime.strptime(data_fim, "%Y-%m-%d") + dt.timedelta(days=1)
+        except: filtros["d_fim"] = None
+
+    filtros_sem_status = {k: v for k, v in filtros.items()
+                          if k not in ("status", "sla", "mudou_tipo")}
+
+    total = db_financeiro.contar_chamados(**filtros)
+    paginas_totais = max(1, math.ceil(total / PER_PAGE))
+    page = max(1, min(page, paginas_totais))
+    ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
+    chamados = db_financeiro.carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
+
+    fs = dict(filtros_sem_status)
+    fs.pop("status", None)
+    fs.pop("sla", None)
+    fs.pop("mudou_tipo", None)
+
+    metricas = {
+        "total":          total,
+        "em_atendimento": db_financeiro.contar_chamados(status="em análise", **fs),
+        "finalizados":    db_financeiro.contar_chamados(**fs, status="fechado"),
+        "fora_sla":       db_financeiro.contar_chamados(sla="fora", **fs),
+        "mudaram_tipo":   db_financeiro.contar_chamados(**fs, mudou_tipo="sim"),
+    }
+
+    filtros_dict = {
+        "status": status, "responsavel": responsavel,
+        "capturado": capturado, "mudou_tipo": mudou_tipo,
+        "data_ini": data_ini, "data_fim": data_fim,
+        "sla": sla, "tipo": tipo
+    }
+    filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v and v != "Todos"})
+
+    return templates.TemplateResponse(
+        "painel_financeiro.html",
+        {
+            "request":        request,
+            "chamados":       chamados,
+            "metricas":       metricas,
+            "pagina_atual":   page,
+            "paginas_totais": paginas_totais,
+            "url_paginacao":  f"/painel-financeiro?{filtros_qs}",
+            "filtros":        filtros_dict,
+            "responsaveis":   db_financeiro.listar_responsaveis(),
+            "capturadores":   db_financeiro.listar_capturadores(),
+            "tipos":          db_financeiro.listar_tipos(),
+            "filtros_as_query": filtros_qs,
+        },
+    )
 
 @app.get("/dashboards", response_class=HTMLResponse)
 async def dashboards(request: Request, user: dict = Depends(require_login)):
