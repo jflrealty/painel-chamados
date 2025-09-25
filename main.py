@@ -147,8 +147,8 @@ async def painel_financeiro(request: Request,
 
     status_map = {
         "Aberto": "aberto",
-        "Em Atendimento": "em análise",
-        "Finalizado": "fechado",
+        "Em Atendimento": "em atendimento",
+        "Finalizado": "finalizado",
         "Cancelado": "cancelado",
         "Todos": None
     }
