@@ -4,7 +4,7 @@ from datetime import datetime
 from dateutil.parser import parse as parse_dt
 
 _TZ = pytz.timezone("America/Sao_Paulo")
-_URL = "postgres://postgres:yZybXyL...@shortline.proxy.rlwy.net:17741/railway"  # Banco Financeiro
+_URL = os.getenv("DATABASE_PUBLIC_URL_FINANCEIRO")
 
 # ── Helpers ─────────────────────────────────────────────
 def _fmt(dt_obj):
