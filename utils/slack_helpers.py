@@ -2,8 +2,13 @@ import os, re
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
-slack_client = WebClient(token=SLACK_BOT_TOKEN)
+# Tokens de ambos os bots
+SLACK_BOT_TOKEN_COMERCIAL = os.getenv("SLACK_BOT_TOKEN", "")
+SLACK_BOT_TOKEN_FINANCEIRO = os.getenv("SLACK_BOT_TOKEN_FINANCEIRO", "")
+
+# Clientes separados
+slack_client_comercial = WebClient(token=SLACK_BOT_TOKEN_COMERCIAL)
+slack_client_financeiro = WebClient(token=SLACK_BOT_TOKEN_FINANCEIRO)
 
 # ────── Grupos nomeados manualmente ──────
 GRUPO_MAP = {
@@ -33,15 +38,23 @@ EMOJI_MAP = {
     ":clap:": "👏",
 }
 
+# ────── Retorna o cliente Slack correto baseado no canal ──────
+def get_slack_client(canal_id: str = None) -> WebClient:
+    if canal_id == "C08KMCDNEFR":  # ID do canal financeiro
+        return slack_client_financeiro
+    return slack_client_comercial
+
 # ────── Buscar nome real do usuário ──────
-def get_real_name(user_id: str) -> str:
+def get_real_name(user_id: str, canal_id: str = None) -> str:
     if not user_id or not isinstance(user_id, str):
         return "<não capturado>"
+
+    client = get_slack_client(canal_id)
 
     # Grupos (começam com “S”)
     if user_id.startswith("S"):
         try:
-            grupos = slack_client.usergroups_list().get("usergroups", [])
+            grupos = client.usergroups_list().get("usergroups", [])
             for g in grupos:
                 if g["id"] == user_id:
                     return g.get("name", GRUPO_MAP.get(user_id, f"<grupo:{user_id}>"))
@@ -51,7 +64,7 @@ def get_real_name(user_id: str) -> str:
 
     # Usuário comum
     try:
-        user_info = slack_client.users_info(user=user_id).get("user", {})
+        user_info = client.users_info(user=user_id).get("user", {})
         nome = (
             user_info.get("real_name") or
             user_info.get("profile", {}).get("real_name_normalized") or
@@ -65,7 +78,7 @@ def get_real_name(user_id: str) -> str:
     return "<não capturado>"
 
 # ────── Formatar mensagens Slack para exibição ──────
-def formatar_texto_slack(texto: str) -> str:
+def formatar_texto_slack(texto: str, canal_id: str = None) -> str:
     if not texto:
         return ""
 
@@ -76,7 +89,7 @@ def formatar_texto_slack(texto: str) -> str:
     # Substitui usuários <@U123>
     texto = re.sub(
         r"<@([A-Z0-9]+)>",
-        lambda m: get_real_name(m.group(1)),
+        lambda m: get_real_name(m.group(1), canal_id),
         texto,
     )
 
