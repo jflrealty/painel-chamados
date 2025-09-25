@@ -185,9 +185,9 @@ async def painel_financeiro(request: Request,
     fs = dict(filtros_sem_status)
 
     metricas = {
-        "total":          total,
-        "em_atendimento": db_financeiro.contar_chamados(status="em análise", **fs),
-        "finalizados":    db_financeiro.contar_chamados(**fs, status="fechado"),
+        "total":          db_financeiro.contar_chamados(**filtros),
+        "em_atendimento": db_financeiro.contar_chamados(**fs, status="em atendimento"),
+        "finalizados":    db_financeiro.contar_chamados(**fs, status="finalizado"),
         "fora_sla":       db_financeiro.contar_chamados(**fs, sla="fora"),
         "mudaram_tipo":   db_financeiro.contar_chamados(**fs, mudou_tipo="sim"),
     }
