@@ -295,7 +295,9 @@ async def thread(request: Request):
 
     mensagens = []
     try:
-        resp = slack_client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
+        from utils.slack_helpers import get_slack_client
+        client = get_slack_client(canal_id)
+        resp = client.conversations_replies(channel=canal_id, ts=thread_ts, limit=200)
         tz   = pytz.timezone("America/Sao_Paulo")
         for i, m in enumerate(resp.get("messages", [])):
             mensagens.append({
