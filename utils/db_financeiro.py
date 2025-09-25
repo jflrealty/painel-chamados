@@ -4,9 +4,9 @@ from datetime import datetime
 from dateutil.parser import parse as parse_dt
 
 _TZ = pytz.timezone("America/Sao_Paulo")
-_URL = "postgres://postgres:yZybXyL...@shortline.proxy.rlwy.net:17741/railway"  # URL do banco FINANCEIRO
+_URL = "postgres://postgres:yZybXyL...@shortline.proxy.rlwy.net:17741/railway"  # Banco Financeiro
 
-# Reaproveita os mesmos helpers do db_helpers, mas renomeia a base
+# ── Helpers ─────────────────────────────────────────────
 def _fmt(dt_obj):
     return dt_obj.astimezone(_TZ).strftime("%d/%m/%Y %H:%M") if dt_obj else "-"
 
@@ -48,9 +48,9 @@ def _apply_filters(q: str, pr: list,
                "AND (historico_reaberturas IS NULL OR historico_reaberturas = '') )")
     return q, pr
 
-# ── API pública ────────────────────────────────────────────────
+# ── API pública ─────────────────────────────────────────
 def contar_chamados(**filtros) -> int:
-    q = "SELECT COUNT(*) FROM ordens_servico WHERE true"
+    q = "SELECT COUNT(*) FROM ordens_servico_financeiro WHERE true"
     q, pr = _apply_filters(q, [], **filtros)
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
@@ -82,29 +82,21 @@ def carregar_chamados(*, limit=None, offset=None, **filtros):
         "canal_id": r[4],
         "thread_ts": r[5],
 
-        # Datas para exibição formatada
         "abertura": _fmt(r[6]),
         "fechamento": _fmt(r[7]),
-
-        # Datas cruas para dashboards (formatadas ISO)
         "abertura_raw": _to_iso(r[6]),
         "fechamento_raw": _to_iso(r[7]),
         "captura_raw": _to_iso(r[13]),
 
-        # SLA
         "sla": (r[8] or "-").lower(),
-
-        # Captura
         "capturado_uid": r[9],
         "capturado_por": _user(r[9]),
-
-        # Solicitante e tipo
         "solicitante": _user(r[10]),
         "mudou_tipo": bool(r[11]) or bool(r[12]),
     } for r in rows]
 
 def listar_responsaveis(**filtros):
-    q, pr = _apply_filters("SELECT DISTINCT responsavel FROM ordens_servico WHERE true", [], **filtros)
+    q, pr = _apply_filters("SELECT DISTINCT responsavel FROM ordens_servico_financeiro WHERE true", [], **filtros)
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
@@ -113,7 +105,7 @@ def listar_responsaveis(**filtros):
         return []
 
 def listar_capturadores(**filtros):
-    q, pr = _apply_filters("SELECT DISTINCT capturado_por FROM ordens_servico WHERE true", [], **filtros)
+    q, pr = _apply_filters("SELECT DISTINCT capturado_por FROM ordens_servico_financeiro WHERE true", [], **filtros)
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
@@ -122,7 +114,7 @@ def listar_capturadores(**filtros):
         return []
 
 def listar_tipos(**filtros):
-    q, pr = _apply_filters("SELECT DISTINCT tipo_ticket FROM ordens_servico WHERE true", [], **filtros)
+    q, pr = _apply_filters("SELECT DISTINCT tipo_ticket FROM ordens_servico_financeiro WHERE true", [], **filtros)
     try:
         with psycopg2.connect(_URL) as conn, conn.cursor() as cur:
             cur.execute(q, pr)
