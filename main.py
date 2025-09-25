@@ -179,14 +179,14 @@ async def painel_financeiro(request: Request,
     ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
     chamados = db_financeiro.carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
 
-    fs = dict(filtros)
-    fs.pop("status", None)  # status vai ser definido manualmente em cada métrica
-    fs.pop("sla", None)
-    fs.pop("mudou_tipo", None)
+    filtros_sem_status = {k: v for k, v in filtros.items()
+                      if k not in ("status", "sla", "mudou_tipo")}
+
+    fs = dict(filtros_sem_status)
 
     metricas = {
         "total":          total,
-        "em_atendimento": db_financeiro.contar_chamados(**fs, status="em análise"),
+        "em_atendimento": db_financeiro.contar_chamados(status="em análise", **fs),
         "finalizados":    db_financeiro.contar_chamados(**fs, status="fechado"),
         "fora_sla":       db_financeiro.contar_chamados(**fs, sla="fora"),
         "mudaram_tipo":   db_financeiro.contar_chamados(**fs, mudou_tipo="sim"),
