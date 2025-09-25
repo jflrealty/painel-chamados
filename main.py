@@ -10,6 +10,8 @@ from slack_sdk import WebClient, errors as slack_err
 
 from auth import router as auth_router, require_login
 from export import export_router
+from utils import db_helpers, db_financeiro
+
 from utils.db_helpers import (
     carregar_chamados,
     contar_chamados,
@@ -129,6 +131,21 @@ async def painel(request: Request,
             "filtros_as_query": filtros_qs,
         },
     )
+
+@app.get("/painel-financeiro", response_class=HTMLResponse)
+async def painel_financeiro(request: Request, user: dict = Depends(require_login)):
+    chamados = db_financeiro.carregar_chamados()
+    responsaveis = db_financeiro.listar_responsaveis()
+    capturadores = db_financeiro.listar_capturadores()
+    tipos = db_financeiro.listar_tipos()
+
+    return templates.TemplateResponse("painel_financeiro.html", {
+        "request": request,
+        "chamados": chamados,
+        "responsaveis": responsaveis,
+        "capturadores": capturadores,
+        "tipos": tipos
+    })
 
 @app.get("/dashboards", response_class=HTMLResponse)
 async def dashboards(request: Request, user: dict = Depends(require_login)):
