@@ -24,8 +24,7 @@ oauth.register(
 def require_login(request: Request) -> dict:
     user: Optional[dict] = request.session.get("user")
     if not user:
-        # Redireciona pro fluxo OAuth em vez de retornar 401
-        return RedirectResponse(url="/login")
+        raise HTTPException(status_code=307, headers={"Location": "/login"})
     return user
 
 @router.get("/login")
