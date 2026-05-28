@@ -125,9 +125,9 @@ async def painel(request: Request,
     filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v and v != "Todos"})
 
     return templates.TemplateResponse(
+        request,
         "painel.html",
         {
-            "request":        request,
             "chamados":       chamados,
             "metricas":       metricas,
             "pagina_atual":   page,
@@ -207,9 +207,9 @@ async def painel_financeiro(request: Request,
     filtros_qs = urlencode({k: v for k, v in filtros_dict.items() if v and v != "Todos"})
 
     return templates.TemplateResponse(
+        request,
         "painel_financeiro.html",
         {
-            "request":        request,
             "chamados":       chamados,
             "metricas":       metricas,
             "pagina_atual":   page,
@@ -282,11 +282,9 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
                         c[campo] = None
 
     return templates.TemplateResponse(
+        request,
         "dashboards.html",
-        {
-            "request": request,
-            "dados": dados
-        }
+        {"dados": dados},
     )
 
 # ───────────────────────── THREAD ───────────────────────────────
@@ -313,5 +311,8 @@ async def thread(request: Request):
     except slack_err.SlackApiError as e:
         print("Slack API:", e.response["error"])
 
-    return templates.TemplateResponse("thread.html",
-                                      {"request": request, "mensagens": mensagens})
+    return templates.TemplateResponse(
+        request,
+        "thread.html",
+        {"mensagens": mensagens},
+    )
