@@ -1,9 +1,11 @@
 # main.py – Painel de Chamados v6 (estável + rápido)
 import os, math, datetime as dt, pytz
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from slack_sdk import WebClient, errors as slack_err
@@ -22,7 +24,11 @@ from utils.db_helpers import (
 from utils.slack_helpers import get_real_name, formatar_texto_slack
 
 # ── App e Middleware ────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 app.add_middleware(
     SessionMiddleware,
@@ -32,7 +38,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(export_router)
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
 PER_PAGE = 20
 
@@ -41,8 +47,11 @@ slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN", ""))
 
 
 # ═════════════════════════ ROTAS ════════════════════════════════
-from fastapi import Depends
-from auth import require_login
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/painel")
+
 
 @app.get("/painel", response_class=HTMLResponse)
 async def painel(request: Request,
@@ -93,7 +102,7 @@ async def painel(request: Request,
     ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
     chamados = carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
 
-    fs = dict(filtros_sem_status)  # evitar duplicação
+    fs = dict(filtros_sem_status)
 
     fs.pop("status", None)
     fs.pop("sla", None)
@@ -221,7 +230,6 @@ async def painel_financeiro(request: Request,
 async def dashboards(request: Request, user: dict = Depends(require_login)):
     import datetime as dt
 
-    # Filtros que vêm do formulário
     data_ini = request.query_params.get("data_ini")
     data_fim = request.query_params.get("data_fim")
     responsavel = request.query_params.get("responsavel")
@@ -251,7 +259,6 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
     if tipo and tipo != "Todos":
         filtros["tipo_ticket"] = tipo
 
-    # Detecção real de filtros válidos
     filtros_ativos = any([
         filtros.get("d_ini"),
         filtros.get("d_fim"),
@@ -265,7 +272,6 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
 
     dados = carregar_chamados(**({} if usar_limit else filtros))
 
-    # Ajusta datas para o front
     for c in dados:
         for campo in ("abertura_raw", "captura_raw", "fechamento_raw"):
             valor = c.get(campo)
@@ -285,7 +291,7 @@ async def dashboards(request: Request, user: dict = Depends(require_login)):
             "dados": dados
         }
     )
-    
+
 # ───────────────────────── THREAD ───────────────────────────────
 @app.post("/thread")
 async def thread(request: Request):
