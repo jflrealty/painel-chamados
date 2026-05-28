@@ -6,8 +6,8 @@ from typing import Optional
 import os
 
 router = APIRouter()
-config = Config(environ=os.environ)
 
+config = Config(environ=os.environ)
 oauth = OAuth(config)
 oauth.register(
     name="azure",
@@ -20,10 +20,12 @@ oauth.register(
         "code_challenge_method": None
     }
 )
+
 def require_login(request: Request) -> dict:
     user: Optional[dict] = request.session.get("user")
     if not user:
-        raise HTTPException(status_code=401, detail="Usuário não autenticado.")
+        # Redireciona pro fluxo OAuth em vez de retornar 401
+        return RedirectResponse(url="/login")
     return user
 
 @router.get("/login")
@@ -34,25 +36,18 @@ async def login(request: Request):
 @router.get("/auth/callback")
 async def auth_callback(request: Request):
     token = await oauth.azure.authorize_access_token(request)
-
-    # Usa o token para buscar dados do usuário
     resp = await oauth.azure.get("me", token=token)
-    user = resp.json()  # <- importante: sem await
-
+    user = resp.json()
     email = user.get("mail") or user.get("userPrincipalName")
     name = user.get("displayName") or email
-
     allowed_emails = os.getenv("AZURE_ALLOWED_EMAILS", "").split(",")
     email_ok = email.lower() in [e.strip().lower() for e in allowed_emails]
-
     if not email_ok:
         raise HTTPException(status_code=403, detail="Acesso não autorizado.")
-
     request.session["user"] = {
         "email": email,
         "name": name,
     }
-
     return RedirectResponse(url="/painel")
 
 @router.get("/logout")
