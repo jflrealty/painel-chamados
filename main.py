@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader
 from starlette.middleware.sessions import SessionMiddleware
 from slack_sdk import WebClient, errors as slack_err
 
@@ -28,7 +29,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 app.add_middleware(
     SessionMiddleware,
@@ -38,8 +39,10 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(export_router)
 
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-templates.env.globals.update(get_real_name=get_real_name, max=max, min=min)
+jinja_env = Environment(loader=FileSystemLoader(str(BASE_DIR / "templates")))
+jinja_env.globals.update(get_real_name=get_real_name, max=max, min=min)
+templates = Jinja2Templates(env=jinja_env)
+
 PER_PAGE = 20
 
 # ── Slack client ────────────────────────────────────────────────
@@ -66,7 +69,6 @@ async def painel(request: Request,
                  tipo: str = "Todos",
                  page: int = 1):
 
-    # Mapeamento visual → real
     status_map = {
         "Aberto": "aberto",
         "Em Atendimento": "em análise",
@@ -75,7 +77,6 @@ async def painel(request: Request,
         "Todos": None
     }
 
-    # filtros preparados
     filtros = {
         "status":      status_map.get(status),
         "resp":        None if responsavel in ("Todos", "") else responsavel,
@@ -103,7 +104,6 @@ async def painel(request: Request,
     chamados = carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
 
     fs = dict(filtros_sem_status)
-
     fs.pop("status", None)
     fs.pop("sla", None)
     fs.pop("mudou_tipo", None)
@@ -180,16 +180,13 @@ async def painel_financeiro(request: Request,
         except: filtros["d_fim"] = None
 
     filtros_sem_status = {k: v for k, v in filtros.items()
-                          if k not in ("status", "sla", "mudou_tipo")}
+                      if k not in ("status", "sla", "mudou_tipo")}
 
     total = db_financeiro.contar_chamados(**filtros)
     paginas_totais = max(1, math.ceil(total / PER_PAGE))
     page = max(1, min(page, paginas_totais))
     ini, fim = (page - 1) * PER_PAGE, page * PER_PAGE
     chamados = db_financeiro.carregar_chamados(limit=PER_PAGE, offset=ini, **filtros)
-
-    filtros_sem_status = {k: v for k, v in filtros.items()
-                      if k not in ("status", "sla", "mudou_tipo")}
 
     fs = dict(filtros_sem_status)
 
